@@ -104,3 +104,15 @@ test('onboarding is shown once and then stays out of the way', async ({ page }) 
 
   expect(errors).toEqual([]);
 });
+
+test('a failed bundle shows a readable reason instead of a black screen', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('eqscope.locale', 'ru'));
+  // Simulate the venue wifi eating the bundle, or a browser that cannot parse it.
+  await page.route('**/assets/*.js', (route) => route.abort());
+  await page.goto('/');
+
+  await expect(page.getByText(/Файл не загрузился|Приложение не запустилось/)).toBeVisible({
+    timeout: 15000,
+  });
+  await expect(page.getByRole('button', { name: 'Очистить кеш и перезагрузить' })).toBeVisible();
+});

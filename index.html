@@ -21,7 +21,126 @@
     <title>EQ Scope</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      Boot screen. React replaces it on mount; if it is still here, something
+      went wrong before the app started - and a black screen on a phone in a
+      dark room tells nobody anything. Inline styles on purpose: this has to
+      render even when the stylesheet is the thing that failed.
+    -->
+    <div id="root">
+      <div
+        id="boot"
+        style="
+          font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          color: #e7edf3;
+          padding: 24px 16px;
+          max-width: 560px;
+          margin: 0 auto;
+        "
+      >
+        <div style="font-size: 19px; font-weight: 600; margin-bottom: 8px">EQ Scope</div>
+        <div id="boot-msg" style="color: #93a1af">Загрузка…</div>
+      </div>
+    </div>
+
+    <!--
+      Classic ES5 script, deliberately not a module: it has to run even if the
+      module bundle fails to parse on an older browser.
+    -->
+    <script>
+      (function () {
+        var reported = false;
+        window.__eqScopeBooted = false;
+
+        function render(title, detail) {
+          if (reported) return;
+          reported = true;
+          var box = document.getElementById('boot-msg');
+          if (!box) return;
+          var html =
+            '<div style="color:#ff5b5b;font-weight:600;margin-bottom:8px">' + title + '</div>';
+          if (detail) {
+            html +=
+              '<pre style="white-space:pre-wrap;word-break:break-word;background:#070809;' +
+              'border:1px solid #262d35;border-radius:8px;padding:10px;font-size:12px;' +
+              'color:#93a1af">' +
+              String(detail).replace(/[<>&]/g, function (c) {
+                return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c];
+              }) +
+              '</pre>';
+          }
+          html +=
+            '<div style="font-size:12px;color:#5d6b79;margin-bottom:12px">' +
+            navigator.userAgent +
+            '</div>' +
+            '<button id="boot-reset" style="font:inherit;color:#05121d;background:#4ea8ff;' +
+            'border:0;border-radius:10px;padding:10px 14px;font-weight:600">' +
+            'Очистить кеш и перезагрузить</button>';
+          box.innerHTML = html;
+
+          var button = document.getElementById('boot-reset');
+          if (button) {
+            button.onclick = function () {
+              // A stale service worker is the usual reason a PWA keeps
+              // showing a broken build after the fix is deployed.
+              var done = function () {
+                location.reload();
+              };
+              try {
+                if (window.caches && caches.keys) {
+                  caches.keys().then(function (keys) {
+                    return Promise.all(
+                      keys.map(function (k) {
+                        return caches.delete(k);
+                      }),
+                    );
+                  });
+                }
+                if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+                  navigator.serviceWorker.getRegistrations().then(function (list) {
+                    return Promise.all(
+                      list.map(function (r) {
+                        return r.unregister();
+                      }),
+                    );
+                  });
+                }
+              } catch (e) {
+                /* nothing else to try */
+              }
+              setTimeout(done, 400);
+            };
+          }
+        }
+
+        window.addEventListener('error', function (event) {
+          var target = event.target;
+          if (target && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) {
+            render('Файл не загрузился', target.src || target.href);
+            return;
+          }
+          render('Ошибка при запуске', (event && event.message) || 'unknown error');
+        }, true);
+
+        window.addEventListener('unhandledrejection', function (event) {
+          var reason = event && event.reason;
+          render('Ошибка при запуске', (reason && (reason.stack || reason.message)) || reason);
+        });
+
+        // Nothing threw, but nothing started either: blocked script, a proxy
+        // serving the wrong thing, or a browser too old to parse the bundle.
+        setTimeout(function () {
+          if (!window.__eqScopeBooted) {
+            render(
+              'Приложение не запустилось',
+              'Скрипт не выполнился за 8 секунд. Обычно это старый браузер, ' +
+                'заблокированный файл или застрявший кеш.',
+            );
+          }
+        }, 8000);
+      })();
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
