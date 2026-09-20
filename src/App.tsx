@@ -7,11 +7,19 @@ import { RtaScreen } from './ui/screens/RtaScreen';
 import { SpectrogramScreen } from './ui/screens/SpectrogramScreen';
 import { ResonancesScreen } from './ui/screens/ResonancesScreen';
 import { SnapshotsScreen } from './ui/screens/SnapshotsScreen';
+import { GeneratorScreen } from './ui/screens/GeneratorScreen';
 import { SettingsScreen } from './ui/screens/SettingsScreen';
 import { DiagnosticsScreen } from './ui/screens/DiagnosticsScreen';
 import type { Dict } from './i18n/ru';
 
-type ScreenId = 'rta' | 'spectrogram' | 'resonances' | 'snapshots' | 'settings' | 'diagnostics';
+type ScreenId =
+  | 'rta'
+  | 'spectrogram'
+  | 'resonances'
+  | 'snapshots'
+  | 'generator'
+  | 'settings'
+  | 'diagnostics';
 
 interface ScreenDef {
   id: ScreenId;
@@ -37,6 +45,7 @@ const SCREENS: ScreenDef[] = [
     render: () => <ResonancesScreen />,
   },
   { id: 'snapshots', icon: '📁', label: (t) => t.nav.snapshots, render: () => <SnapshotsScreen /> },
+  { id: 'generator', icon: '〰️', label: (t) => t.nav.generator, render: () => <GeneratorScreen /> },
   { id: 'settings', icon: '⚙️', label: (t) => t.nav.settings, render: () => <SettingsScreen /> },
   {
     id: 'diagnostics',

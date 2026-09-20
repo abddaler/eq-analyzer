@@ -8,15 +8,20 @@ import { WINDOW_TYPES, type WindowType } from '../../dsp/windows';
 import { WEIGHTINGS, type Weighting } from '../../dsp/weighting';
 import { BUILTIN_PROFILES } from '../../data/mic-profiles';
 import { ANDROID_UNPROCESSED_SPL_AT_0DBFS } from '../../dsp/calibration';
+import { CalibrationCard } from '../components/CalibrationCard';
+import { useLibrary } from '../useLibrary';
+import { Toggle } from '../components/Controls';
 
 export function SettingsScreen() {
   const { t, locale, setLocale } = useI18n();
   const { engine, settings, update, devices, deviceId, setDeviceId, refreshDevices, running } =
     useEngine();
+  const { customMicProfiles } = useLibrary();
   const [theme, setTheme] = useTheme();
   const [knownSpl, setKnownSpl] = useState('');
 
   const profile = settings.micProfile;
+  const allProfiles = [...BUILTIN_PROFILES, ...customMicProfiles];
 
   const applyCalibration = () => {
     const target = Number(knownSpl);
@@ -93,6 +98,19 @@ export function SettingsScreen() {
             options={WEIGHTINGS.map((w) => ({ value: w, label: w }))}
           />
         </div>
+        <div className="row row--between">
+          <span className="small muted">{t.multires.label}</span>
+          <Toggle
+            checked={settings.multiResolution}
+            onChange={(multiResolution) => update({ multiResolution })}
+            label={settings.multiResolution ? t.common.on : t.common.off}
+          />
+        </div>
+        <div className="faint small">
+          {settings.multiResolution && engine.snapshot.lowBandFftSize > 0
+            ? t.multires.hint(engine.snapshot.lowBandCrossoverHz, engine.snapshot.lowBandFftSize)
+            : t.multires.off}
+        </div>
         <label className="field">
           {t.settings.peakDecay}
           <input
@@ -112,11 +130,11 @@ export function SettingsScreen() {
           <select
             value={profile?.id ?? ''}
             onChange={(e) =>
-              update({ micProfile: BUILTIN_PROFILES.find((p) => p.id === e.target.value) ?? null })
+              update({ micProfile: allProfiles.find((p) => p.id === e.target.value) ?? null })
             }
           >
             <option value="">{t.settings.profileNone}</option>
-            {BUILTIN_PROFILES.map((p) => (
+            {allProfiles.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
@@ -130,6 +148,8 @@ export function SettingsScreen() {
           </div>
         )}
       </div>
+
+      <CalibrationCard />
 
       <div className="card col">
         <div className="card__title">{t.settings.levelCalibration}</div>

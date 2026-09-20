@@ -16,6 +16,7 @@ import {
   type BandMapping,
   type OctaveFraction,
 } from './octave';
+import { LowBandRefiner, longFftSizeFor } from './multires';
 import { ResonanceDetector, type Resonance } from './peaks';
 import { MIN_POWER, powerToDb, SpectrumAnalyzer } from './spectrum';
 import { weightingDb, weightingGains, weightedTotal, type Weighting } from './weighting';
@@ -38,6 +39,8 @@ export interface EngineSettings {
   peakDecayDbPerSecond: number;
   micProfile: MicProfile | null;
   levelCalibration: LevelCalibration;
+  /** Recompute the low bands from a longer FFT (see multires.ts). */
+  multiResolution: boolean;
   /** Narrow-peak detector: how far above the local median counts as a peak. */
   resonanceThresholdDb: number;
   /** How long a peak has to hold before it is named. */
@@ -56,6 +59,7 @@ export const DEFAULT_SETTINGS: EngineSettings = {
   peakDecayDbPerSecond: 12,
   micProfile: null,
   levelCalibration: { splAt0dBFS: null },
+  multiResolution: true,
   resonanceThresholdDb: 10,
   resonanceMinDurationMs: 300,
 };
@@ -85,6 +89,9 @@ export interface EngineSnapshot {
   binWidth: number;
   enbwBins: number;
   binCount: number;
+  /** Long-FFT size in use for the low bands, 0 when multi-resolution is off. */
+  lowBandFftSize: number;
+  lowBandCrossoverHz: number;
   /** Averaged, mic-corrected bin power (for the FFT view). */
   binPower: Float64Array;
   bands: Band[];
@@ -150,6 +157,8 @@ export class AnalyzerEngine {
   private noiseAverager: LinearAverager | null = null;
   private noiseFramesLeft = 0;
   private noiseFloor: Float64Array | null = null;
+  private refiner: LowBandRefiner | null = null;
+  private nextLongFrame = 0;
   private detector = new ResonanceDetector();
   private lastPeakDb = -120;
   private clipping = false;
@@ -168,6 +177,8 @@ export class AnalyzerEngine {
       binWidth: 0,
       enbwBins: 1.5,
       binCount: 0,
+      lowBandFftSize: 0,
+      lowBandCrossoverHz: 0,
       binPower: new Float64Array(0),
       bands,
       bandPower: new Float64Array(bands.length),
@@ -241,7 +252,8 @@ export class AnalyzerEngine {
       (patch.micProfile !== undefined && patch.micProfile?.id !== this.settings.micProfile?.id) ||
       (patch.longWindowSeconds !== undefined &&
         patch.longWindowSeconds !== this.settings.longWindowSeconds) ||
-      (patch.averaging !== undefined && patch.averaging !== this.settings.averaging);
+      (patch.averaging !== undefined && patch.averaging !== this.settings.averaging) ||
+      (patch.multiResolution !== undefined && patch.multiResolution !== this.settings.multiResolution);
     this.settings = { ...this.settings, ...patch };
     if (this.peakHold) this.peakHold.decayDbPerSecond = this.settings.peakDecayDbPerSecond;
     this.detector.configure({
@@ -333,6 +345,17 @@ export class AnalyzerEngine {
       this.frameSeconds,
     );
     this.peakHold = new PeakHold(bands.length, this.settings.peakDecayDbPerSecond);
+    this.refiner = this.settings.multiResolution
+      ? new LowBandRefiner(
+          rate,
+          longFftSizeFor(fftSize),
+          windowType,
+          bands,
+          fftSize,
+          this.settings.micProfile,
+        )
+      : null;
+    this.nextLongFrame = 0;
     this.noiseFloor = null;
     this.detector.reset();
     this.nextFrame = 0;
@@ -349,6 +372,8 @@ export class AnalyzerEngine {
       binWidth: this.analyser.binWidth,
       enbwBins: this.analyser.enbwBins,
       binCount: bins,
+      lowBandFftSize: this.refiner && this.refiner.bandCount > 0 ? this.refiner.fftSize : 0,
+      lowBandCrossoverHz: this.refiner && this.refiner.bandCount > 0 ? this.refiner.crossoverHz : 0,
       binPower: new Float64Array(bins),
       bands,
       bandPower: new Float64Array(bands.length),
@@ -415,6 +440,23 @@ export class AnalyzerEngine {
       this.nextFrame = Math.max(0, buffer.written - size);
     }
 
+    // The long transform for the low bands runs on its own, slower schedule;
+    // its result is held between updates so the averagers see a continuous
+    // stream.
+    const refiner = this.refiner;
+    if (refiner && refiner.bandCount > 0) {
+      const longSize = refiner.fftSize;
+      if (this.nextLongFrame === 0) this.nextLongFrame = Math.max(0, buffer.written - longSize);
+      if (buffer.written - this.nextLongFrame > longSize * 4) {
+        this.nextLongFrame = Math.max(0, buffer.written - longSize);
+      }
+      while (this.nextLongFrame + longSize <= buffer.written) {
+        if (!buffer.read(this.nextLongFrame, refiner.frame)) break;
+        refiner.update();
+        this.nextLongFrame += longSize >> 1;
+      }
+    }
+
     let processed = 0;
     const dt = this.frameSeconds;
     while (this.nextFrame + size <= buffer.written && processed < 8) {
@@ -423,6 +465,7 @@ export class AnalyzerEngine {
       for (let k = 0; k < power.length; k++) this.corrected[k] = power[k] * this.micGains[k];
 
       bandEnergy(this.corrected, mapping, this.instantBands);
+      refiner?.applyTo(this.instantBands);
       // Resonances are looked for in the instantaneous spectrum: averaging
       // would smear exactly the narrow, steady peaks we are hunting.
       this.detector.push(this.corrected, analyser.binWidth, analyser.enbwBins, performance.now());
