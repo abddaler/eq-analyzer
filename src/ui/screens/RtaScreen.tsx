@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useEngine, useEngineTick } from '../useEngine';
 import { useT } from '../../i18n';
 import { SpectrumPlot, type CursorReadout, type PlotMode } from '../components/SpectrumPlot';
@@ -8,6 +8,8 @@ import { LONG_WINDOW_SECONDS, type AveragingMode } from '../../dsp/engine';
 import { useSuggestions } from '../useSuggestions';
 import { SuggestionCard, type SuggestMode } from '../components/SuggestionCards';
 import { BUILTIN_TARGETS } from '../../analysis/targets';
+import { useLibrary } from '../useLibrary';
+import { exportBandsCsv, exportCanvasPng } from '../export';
 import type { Dict } from '../../i18n/ru';
 
 const TARGET_KEY = 'eqscope.target';
@@ -38,7 +40,9 @@ export function RtaScreen() {
   const [suggestMode, setSuggestMode] = useState<SuggestMode>(
     () => stored(SUGGEST_MODE_KEY, 'simple') as SuggestMode,
   );
-  const { suggestions, targetDb, windowFill, ready } = useSuggestions(targetId);
+  const { customTargets } = useLibrary();
+  const { suggestions, targetDb, windowFill, ready } = useSuggestions(targetId, customTargets);
+  const plotRef = useRef<HTMLCanvasElement | null>(null);
 
   const chooseTarget = (id: string) => {
     setTargetId(id);
@@ -105,6 +109,7 @@ export function RtaScreen() {
           trustedFromHz={trustedFrom}
           height="40vh"
           onCursor={onCursor}
+          canvasRef={plotRef}
         />
       </div>
 
@@ -132,6 +137,11 @@ export function RtaScreen() {
             {BUILTIN_TARGETS.map((c) => (
               <option key={c.id} value={c.id}>
                 {targetName(t, c.id)}
+              </option>
+            ))}
+            {customTargets.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.customName ?? c.id}
               </option>
             ))}
           </select>
@@ -220,6 +230,36 @@ export function RtaScreen() {
             onChange={(peakHoldEnabled) => update({ peakHoldEnabled })}
             label={settings.peakHoldEnabled ? t.common.on : t.common.off}
           />
+        </div>
+        <div className="row row--between">
+          <span className="small muted">{t.snapshots.export}</span>
+          <div className="row">
+            <button
+              className="btn--small btn--ghost"
+              onClick={() => plotRef.current && exportCanvasPng(plotRef.current, 'rta')}
+            >
+              {t.snapshots.exportPng}
+            </button>
+            <button
+              className="btn--small btn--ghost"
+              disabled={!running}
+              onClick={() =>
+                exportBandsCsv(
+                  s.bands,
+                  [
+                    { header: 'level_db', values: s.bandDb },
+                    { header: 'long_avg_db', values: s.longBandDb },
+                    { header: 'peak_hold_db', values: s.peakHoldDb },
+                    { header: 'noise_db', values: s.noiseFloorDb },
+                    { header: 'target_db', values: targetDb },
+                  ],
+                  'rta',
+                )
+              }
+            >
+              {t.snapshots.exportCsv}
+            </button>
+          </div>
         </div>
         <div className="row row--between">
           <span className="small muted">{t.rta.noiseFloor}</span>

@@ -33,6 +33,7 @@ interface Props {
   trustedFromHz: number;
   height?: number | string;
   onCursor?: (readout: CursorReadout | null) => void;
+  canvasRef?: React.MutableRefObject<HTMLCanvasElement | null>;
 }
 
 const DB_SPAN = 70;
@@ -55,6 +56,7 @@ export function SpectrumPlot({
   trustedFromHz,
   height = 260,
   onCursor,
+  canvasRef,
 }: Props) {
   const rangeRef = useRef({ top: -10, settled: false });
   const cursorRef = useRef<number | null>(null);
@@ -194,6 +196,7 @@ export function SpectrumPlot({
       height={height}
       onPointer={handlePointer}
       ariaLabel="RTA"
+      canvasRef={canvasRef}
     />
   );
 }

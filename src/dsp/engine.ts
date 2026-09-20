@@ -16,6 +16,7 @@ import {
   type BandMapping,
   type OctaveFraction,
 } from './octave';
+import { ResonanceDetector, type Resonance } from './peaks';
 import { MIN_POWER, powerToDb, SpectrumAnalyzer } from './spectrum';
 import { weightingDb, weightingGains, weightedTotal, type Weighting } from './weighting';
 import type { WindowType } from './windows';
@@ -37,6 +38,10 @@ export interface EngineSettings {
   peakDecayDbPerSecond: number;
   micProfile: MicProfile | null;
   levelCalibration: LevelCalibration;
+  /** Narrow-peak detector: how far above the local median counts as a peak. */
+  resonanceThresholdDb: number;
+  /** How long a peak has to hold before it is named. */
+  resonanceMinDurationMs: number;
 }
 
 export const DEFAULT_SETTINGS: EngineSettings = {
@@ -51,6 +56,8 @@ export const DEFAULT_SETTINGS: EngineSettings = {
   peakDecayDbPerSecond: 12,
   micProfile: null,
   levelCalibration: { splAt0dBFS: null },
+  resonanceThresholdDb: 10,
+  resonanceMinDurationMs: 300,
 };
 
 export interface Levels {
@@ -95,6 +102,8 @@ export interface EngineSnapshot {
   /** Display weighting per band, dB - applied when drawing, not when analysing. */
   bandWeightingDb: Float64Array;
   levels: Levels;
+  /** Narrow peaks currently ringing, strongest first. */
+  resonances: Resonance[];
   elapsedSeconds: number;
   frames: number;
 }
@@ -141,6 +150,7 @@ export class AnalyzerEngine {
   private noiseAverager: LinearAverager | null = null;
   private noiseFramesLeft = 0;
   private noiseFloor: Float64Array | null = null;
+  private detector = new ResonanceDetector();
   private lastPeakDb = -120;
   private clipping = false;
   private clipUntil = 0;
@@ -180,6 +190,7 @@ export class AnalyzerEngine {
         spl: null,
         splA: null,
       },
+      resonances: [],
       elapsedSeconds: 0,
       frames: 0,
     };
@@ -233,6 +244,10 @@ export class AnalyzerEngine {
       (patch.averaging !== undefined && patch.averaging !== this.settings.averaging);
     this.settings = { ...this.settings, ...patch };
     if (this.peakHold) this.peakHold.decayDbPerSecond = this.settings.peakDecayDbPerSecond;
+    this.detector.configure({
+      thresholdDb: this.settings.resonanceThresholdDb,
+      minDurationMs: this.settings.resonanceMinDurationMs,
+    });
     if (structural) this.rebuild();
     else this.publishSoon();
   }
@@ -259,6 +274,17 @@ export class AnalyzerEngine {
 
   resetPeakHold(): void {
     this.peakHold?.reset();
+  }
+
+  /** The ring-out list: peaks that have already stopped. */
+  get resonanceHistory(): Resonance[] {
+    return this.detector.history;
+  }
+
+  resetResonances(): void {
+    this.detector.reset();
+    this.snapshot.resonances = [];
+    this.publishSoon();
   }
 
   /** Start a background-noise measurement; bands below it are not trusted. */
@@ -308,6 +334,7 @@ export class AnalyzerEngine {
     );
     this.peakHold = new PeakHold(bands.length, this.settings.peakDecayDbPerSecond);
     this.noiseFloor = null;
+    this.detector.reset();
     this.nextFrame = 0;
 
     const weightingPerBand = new Float64Array(bands.length);
@@ -396,6 +423,9 @@ export class AnalyzerEngine {
       for (let k = 0; k < power.length; k++) this.corrected[k] = power[k] * this.micGains[k];
 
       bandEnergy(this.corrected, mapping, this.instantBands);
+      // Resonances are looked for in the instantaneous spectrum: averaging
+      // would smear exactly the narrow, steady peaks we are hunting.
+      this.detector.push(this.corrected, analyser.binWidth, analyser.enbwBins, performance.now());
       this.binAverager?.push(this.corrected, dt);
       this.bandAverager?.push(this.instantBands, dt);
       this.longAverager?.push(this.instantBands, dt);
@@ -474,6 +504,7 @@ export class AnalyzerEngine {
       spl: levelToSpl(zDb, cal),
       splA: levelToSpl(aDb, cal),
     };
+    s.resonances = this.detector.active();
     s.running = true;
     s.frozen = this.frozenFlag;
     s.revision++;

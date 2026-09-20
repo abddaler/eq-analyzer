@@ -58,9 +58,29 @@ test('every screen renders', async ({ page }) => {
   const errors = collectErrors(page);
   await openApp(page);
 
-  for (const name of ['Настройки', 'Диагностика', 'Спектр']) {
+  for (const name of ['Водопад', 'Резонансы', 'Снимки', 'Настройки', 'Диагностика', 'Спектр']) {
     await page.getByRole('button', { name }).click();
     await expect(page.locator('.app__body')).toBeVisible();
   }
+  expect(errors).toEqual([]);
+});
+
+test('a snapshot survives a round trip through IndexedDB', async ({ page }) => {
+  const errors = collectErrors(page);
+  await openApp(page);
+
+  await page.getByRole('button', { name: 'Старт' }).click();
+  await expect(page.getByRole('button', { name: 'Стоп' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Снимки' }).click();
+  await page.getByPlaceholder('Название').fill('Проверка');
+  await page.getByRole('button', { name: 'Сохранить снимок' }).click();
+  await expect(page.getByText('Проверка')).toBeVisible();
+
+  // Reload: the snapshot has to come back from storage, not from React state.
+  await page.reload();
+  await page.getByRole('button', { name: 'Снимки' }).click();
+  await expect(page.getByText('Проверка')).toBeVisible();
+
   expect(errors).toEqual([]);
 });

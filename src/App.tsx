@@ -4,11 +4,14 @@ import { useT } from './i18n';
 import { useTheme } from './ui/theme';
 import { useEngine } from './ui/useEngine';
 import { RtaScreen } from './ui/screens/RtaScreen';
+import { SpectrogramScreen } from './ui/screens/SpectrogramScreen';
+import { ResonancesScreen } from './ui/screens/ResonancesScreen';
+import { SnapshotsScreen } from './ui/screens/SnapshotsScreen';
 import { SettingsScreen } from './ui/screens/SettingsScreen';
 import { DiagnosticsScreen } from './ui/screens/DiagnosticsScreen';
 import type { Dict } from './i18n/ru';
 
-type ScreenId = 'rta' | 'settings' | 'diagnostics';
+type ScreenId = 'rta' | 'spectrogram' | 'resonances' | 'snapshots' | 'settings' | 'diagnostics';
 
 interface ScreenDef {
   id: ScreenId;
@@ -21,6 +24,19 @@ interface ScreenDef {
 
 const SCREENS: ScreenDef[] = [
   { id: 'rta', icon: '📊', label: (t) => t.nav.rta, render: () => <RtaScreen /> },
+  {
+    id: 'spectrogram',
+    icon: '🌊',
+    label: (t) => t.nav.spectrogram,
+    render: () => <SpectrogramScreen />,
+  },
+  {
+    id: 'resonances',
+    icon: '🔔',
+    label: (t) => t.nav.resonances,
+    render: () => <ResonancesScreen />,
+  },
+  { id: 'snapshots', icon: '📁', label: (t) => t.nav.snapshots, render: () => <SnapshotsScreen /> },
   { id: 'settings', icon: '⚙️', label: (t) => t.nav.settings, render: () => <SettingsScreen /> },
   {
     id: 'diagnostics',

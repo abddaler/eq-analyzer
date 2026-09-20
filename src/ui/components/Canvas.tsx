@@ -19,6 +19,8 @@ interface Props {
   className?: string;
   onPointer?: (info: PointerInfo) => void;
   ariaLabel?: string;
+  /** Lets a parent grab the element, e.g. to export it as a PNG. */
+  canvasRef?: React.MutableRefObject<HTMLCanvasElement | null>;
 }
 
 /**
@@ -28,8 +30,17 @@ interface Props {
  * on a phone a dropped frame is visible, and the spectrum must not stutter
  * because a label above it changed.
  */
-export function Canvas({ draw, animate = false, height = 200, className, onPointer, ariaLabel }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+export function Canvas({
+  draw,
+  animate = false,
+  height = 200,
+  className,
+  onPointer,
+  ariaLabel,
+  canvasRef: externalRef,
+}: Props) {
+  const ownRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasRef = externalRef ?? ownRef;
   const drawRef = useRef(draw);
   drawRef.current = draw;
   const pointerRef = useRef(onPointer);
