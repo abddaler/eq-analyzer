@@ -4,7 +4,7 @@ import { powerToDb } from '../../dsp/spectrum';
 import { frequencyToNote, nearestGeqBand } from '../../dsp/notes';
 import { GEQ_31_BANDS, formatFrequency } from '../../dsp/octave';
 import { Canvas, type PointerInfo } from './Canvas';
-import { clearPlot, drawGrid, dbToY, freqToX, xToFreq } from '../plot';
+import { clearPlot, drawDbLabels, drawGrid, dbToY, freqToX, xToFreq } from '../plot';
 import { cssVar } from '../theme';
 
 export type PlotMode = 'rta' | 'fft';
@@ -71,10 +71,13 @@ export function SpectrumPlot({
       const s = engine.snapshot;
       const levels = levelsFor(s);
 
-      // Auto-range on the loudest band so the picture is useful without a
-      // calibrated level, but move slowly: a jumping axis is unreadable.
+      // Auto-range on the loudest *trustworthy* band so the picture is useful
+      // without a calibrated level, but move slowly: a jumping axis is
+      // unreadable. Bands below the microphone's range are excluded - they
+      // carry corrected noise and would squash everything else.
       let loudest = -140;
       for (let b = 0; b < levels.length; b++) {
+        if (s.bands[b].center < trustedFromHz) continue;
         const v = levels[b] + s.bandWeightingDb[b];
         if (v > loudest) loudest = v;
       }
@@ -136,6 +139,8 @@ export function SpectrumPlot({
         ctx.stroke();
         ctx.setLineDash([]);
       }
+
+      drawDbLabels(ctx, h, { dbMin, dbMax, dbStep: 10 });
 
       const cursor = cursorRef.current;
       if (cursor !== null) {

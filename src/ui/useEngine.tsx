@@ -10,7 +10,7 @@ import {
 import { AnalyzerEngine, DEFAULT_SETTINGS, type EngineSettings } from '../dsp/engine';
 import { WebAudioSource } from '../audio/WebAudioSource';
 import type { AudioDeviceOption } from '../audio/AudioSource';
-import { BUILTIN_PROFILES } from '../data/mic-profiles';
+import { BUILTIN_PROFILES, PHONE_GENERIC } from '../data/mic-profiles';
 import { useT } from '../i18n';
 
 const SETTINGS_KEY = 'eqscope.settings';
@@ -29,7 +29,11 @@ function loadSettings(): EngineSettings {
   } catch {
     // Corrupt or unavailable storage: fall back to defaults.
   }
-  return { ...DEFAULT_SETTINGS };
+  // First run: assume a phone microphone. It is the honest default - it marks
+  // everything below 80 Hz as untrusted instead of quietly presenting the
+  // capsule's roll-off as the room's response. Choosing "no correction" is a
+  // deliberate act and is remembered.
+  return { ...DEFAULT_SETTINGS, micProfile: PHONE_GENERIC };
 }
 
 function saveSettings(settings: EngineSettings): void {

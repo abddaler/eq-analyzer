@@ -66,6 +66,13 @@ export function drawGrid(
   ctx.stroke();
 
   if (o.labelFreqs !== false) {
+    // The trace reaches the bottom of the plot, so the labels need a backdrop
+    // to stay readable against bars rather than against the background.
+    ctx.fillStyle = cssVar('--bg-sunken', '#070809');
+    ctx.globalAlpha = 0.75;
+    ctx.fillRect(0, height - 13, width, 13);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = faint;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     for (const f of GRID_FREQS) {
@@ -82,6 +89,36 @@ export function drawGrid(
       if (y < 8 || y > height - 8) continue;
       ctx.fillText(String(db), 3, y);
     }
+  }
+}
+
+/**
+ * Repaint the level scale on top of the traces.
+ *
+ * The grid is drawn first, so bars that reach the left edge would otherwise
+ * bury the numbers; this puts them back with a narrow backdrop.
+ */
+export function drawDbLabels(
+  ctx: CanvasRenderingContext2D,
+  height: number,
+  o: { dbMin: number; dbMax: number; dbStep?: number },
+): void {
+  const step = o.dbStep ?? 10;
+  const first = Math.ceil(o.dbMin / step) * step;
+  ctx.font = '10px ui-monospace, monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  for (let db = first; db <= o.dbMax; db += step) {
+    const y = dbToY(db, o.dbMin, o.dbMax, height);
+    if (y < 8 || y > height - 14) continue;
+    const text = String(db);
+    const width = ctx.measureText(text).width + 6;
+    ctx.fillStyle = cssVar('--bg-sunken', '#070809');
+    ctx.globalAlpha = 0.75;
+    ctx.fillRect(0, y - 6, width, 12);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = cssVar('--text-faint', '#5d6b79');
+    ctx.fillText(text, 3, y);
   }
 }
 

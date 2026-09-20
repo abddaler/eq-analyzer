@@ -55,8 +55,11 @@ export function Spectrogram({ engine, dynamicRangeDb = 60, height = '45vh' }: Pr
 
   const draw = useCallback(
     (ctx: CanvasRenderingContext2D, w: number, h: number) => {
-      const width = Math.max(1, Math.round(w));
-      const heightPx = Math.max(1, Math.round(h));
+      // Keep the history at device resolution: upscaling a CSS-pixel buffer
+      // turns thin resonance stripes into mush on a high-DPI phone.
+      const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      const width = Math.max(1, Math.round(w * dpr));
+      const heightPx = Math.max(1, Math.round(h * dpr));
       let off = offRef.current;
       if (!off || off.width !== width || off.height !== heightPx) {
         off = document.createElement('canvas');

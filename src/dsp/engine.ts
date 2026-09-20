@@ -20,7 +20,7 @@ import { LowBandRefiner, longFftSizeFor } from './multires';
 import { ResonanceDetector, type Resonance } from './peaks';
 import { MIN_POWER, powerToDb, SpectrumAnalyzer } from './spectrum';
 import { gccPhatDelay, TransferFunction, type DelayEstimate, type TransferResult } from './transfer';
-import { weightingDb, weightingGains, weightedTotal, type Weighting } from './weighting';
+import { weightingDb, weightingGains, type Weighting } from './weighting';
 import type { WindowType } from './windows';
 
 export type AveragingMode = 'fast' | 'slow' | 'infinite';
@@ -153,6 +153,8 @@ export class AnalyzerEngine {
   private aGains: Float64Array = new Float64Array(0);
   private cGains: Float64Array = new Float64Array(0);
   private frame: Float32Array = new Float32Array(0);
+  private levelFrom = 0;
+  private levelTo = 0;
   private corrected: Float64Array = new Float64Array(0);
   private instantBands: Float64Array = new Float64Array(0);
 
@@ -177,7 +179,6 @@ export class AnalyzerEngine {
   private transferRef: Float32Array = new Float32Array(0);
   private transferMeas: Float32Array = new Float32Array(0);
   private nextTransferFrame = 0;
-  private lastTransferResult = 0;
   private refiner: LowBandRefiner | null = null;
   private nextLongFrame = 0;
   private detector = new ResonanceDetector();
@@ -383,6 +384,13 @@ export class AnalyzerEngine {
     const bands = makeBands(fraction, 20, Math.min(20000, rate / 2));
     this.mapping = mapBinsToBands(bands, this.analyser.binWidth, bins);
     this.micGains = correctionGains(this.settings.micProfile, this.frequencies);
+    // Broadband level is integrated only over what the microphone can
+    // actually hear: outside that range there is correction applied to noise,
+    // and letting it into the SPL reading would inflate it by several dB.
+    const micFrom = this.settings.micProfile?.trustedFromHz ?? 20;
+    const micTo = this.settings.micProfile?.trustedToHz ?? rate / 2;
+    this.levelFrom = Math.max(1, Math.floor(micFrom / this.analyser.binWidth));
+    this.levelTo = Math.min(bins, Math.ceil(micTo / this.analyser.binWidth) + 1);
     this.aGains = weightingGains('A', this.frequencies);
     this.cGains = weightingGains('C', this.frequencies);
     this.frame = new Float32Array(fftSize);
@@ -544,9 +552,14 @@ export class AnalyzerEngine {
       if (this.settings.peakHoldEnabled) this.peakHold?.push(this.instantBands, dt);
 
       let zTotal = 0;
-      for (let k = 0; k < this.corrected.length; k++) zTotal += this.corrected[k];
-      const aTotal = weightedTotal(this.corrected, this.aGains);
-      const cTotal = weightedTotal(this.corrected, this.cGains);
+      let aTotal = 0;
+      let cTotal = 0;
+      for (let k = this.levelFrom; k < this.levelTo; k++) {
+        const p = this.corrected[k];
+        zTotal += p;
+        aTotal += p * this.aGains[k];
+        cTotal += p * this.cGains[k];
+      }
       this.zSlow.push([zTotal], dt);
       this.aSlow.push([aTotal], dt);
       this.cSlow.push([cTotal], dt);
@@ -663,13 +676,10 @@ export class AnalyzerEngine {
       const rate = this.analyser?.sampleRate ?? 48000;
       s.transferFrames = this.transfer.frames;
       s.transferDelayMs = (this.settings.transferDelaySamples / rate) * 1000;
-      // Building the result allocates three arrays; the eye does not need it
-      // more often than a few times a second.
-      const now = performance.now();
-      if (this.transfer.frames > 0 && now - this.lastTransferResult > 250) {
-        this.lastTransferResult = now;
-        s.transfer = this.transfer.result();
-      }
+      // The estimator reuses its arrays, so there is nothing to save by
+      // refreshing this on a timer - and a timer would make a reset take a
+      // quarter of a second to become visible.
+      s.transfer = this.transfer.frames > 0 ? this.transfer.result() : null;
     } else {
       s.transfer = null;
       s.transferFrames = 0;

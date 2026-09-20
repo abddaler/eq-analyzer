@@ -72,12 +72,23 @@ export function interpolateResponse(
 }
 
 /**
+ * Largest boost a correction may apply.
+ *
+ * Where a capsule is 30 dB down it is not quiet, it is deaf: multiplying its
+ * own noise by a thousand produces a confident-looking reading of nothing.
+ * Real measurement-microphone files stay within a few dB, so this only ever
+ * bites on a phone's bottom octave - which is marked untrusted anyway.
+ */
+export const MAX_CORRECTION_DB = 15;
+
+/**
  * Linear power gains that undo the microphone response.
  * Multiply a power spectrum by these before summing into bands.
  */
 export function correctionGains(
   profile: MicProfile | null,
   frequencies: ArrayLike<number>,
+  maxBoostDb = MAX_CORRECTION_DB,
 ): Float64Array {
   const out = new Float64Array(frequencies.length);
   if (!profile) {
@@ -86,7 +97,7 @@ export function correctionGains(
   }
   const response = interpolateResponse(profile.points, frequencies);
   for (let i = 0; i < out.length; i++) {
-    out[i] = Math.pow(10, -response[i] / 10);
+    out[i] = Math.pow(10, Math.min(-response[i], maxBoostDb) / 10);
   }
   return out;
 }

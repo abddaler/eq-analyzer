@@ -121,6 +121,8 @@ export class TransferFunction {
   private readonly sxyRe: Float64Array;
   private readonly sxyIm: Float64Array;
   private readonly scratch: Float64Array;
+  /** Reused so a result can be produced every frame without allocating. */
+  private readonly output: TransferResult;
   private frameCount = 0;
 
   constructor(fftSize: number, sampleRate: number, windowType: WindowType = 'hann') {
@@ -139,6 +141,14 @@ export class TransferFunction {
     this.sxyRe = new Float64Array(this.bins);
     this.sxyIm = new Float64Array(this.bins);
     this.scratch = new Float64Array(fftSize);
+    this.output = {
+      magnitudeDb: new Float64Array(this.bins),
+      phaseDeg: new Float64Array(this.bins),
+      coherence: new Float64Array(this.bins),
+      frames: 0,
+      binWidth: this.binWidth,
+      bins: this.bins,
+    };
   }
 
   get frames(): number {
@@ -174,10 +184,13 @@ export class TransferFunction {
     this.frameCount++;
   }
 
+  /**
+   * Current estimate. The arrays are reused between calls - copy them if they
+   * have to outlive the next call. Reusing them is what makes it cheap enough
+   * to produce a result on every frame instead of on a timer.
+   */
   result(): TransferResult {
-    const magnitudeDb = new Float64Array(this.bins);
-    const phaseDeg = new Float64Array(this.bins);
-    const coherence = new Float64Array(this.bins);
+    const { magnitudeDb, phaseDeg, coherence } = this.output;
     for (let k = 0; k < this.bins; k++) {
       const sxx = this.sxx[k];
       const syy = this.syy[k];
@@ -188,13 +201,7 @@ export class TransferFunction {
       phaseDeg[k] = (Math.atan2(im, re) * 180) / Math.PI;
       coherence[k] = sxx > 1e-30 && syy > 1e-30 ? Math.min(1, magSq / (sxx * syy)) : 0;
     }
-    return {
-      magnitudeDb,
-      phaseDeg,
-      coherence,
-      frames: this.frameCount,
-      binWidth: this.binWidth,
-      bins: this.bins,
-    };
+    this.output.frames = this.frameCount;
+    return this.output;
   }
 }
