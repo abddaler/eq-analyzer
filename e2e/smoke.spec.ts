@@ -59,7 +59,7 @@ test('every screen renders', async ({ page }) => {
   const errors = collectErrors(page);
   await openApp(page);
 
-  for (const name of ['Водопад', 'Резонансы', 'Снимки', 'Генератор', 'Настройки', 'Диагностика', 'Спектр']) {
+  for (const name of ['Водопад', 'Резонансы', 'Снимки', 'Генератор', '2 канала', 'Настройки', 'Диагностика', 'Спектр']) {
     await page.getByRole('button', { name }).click();
     await expect(page.locator('.app__body')).toBeVisible();
   }

@@ -8,6 +8,7 @@ import { SpectrogramScreen } from './ui/screens/SpectrogramScreen';
 import { ResonancesScreen } from './ui/screens/ResonancesScreen';
 import { SnapshotsScreen } from './ui/screens/SnapshotsScreen';
 import { GeneratorScreen } from './ui/screens/GeneratorScreen';
+import { TransferScreen } from './ui/screens/TransferScreen';
 import { SettingsScreen } from './ui/screens/SettingsScreen';
 import { DiagnosticsScreen } from './ui/screens/DiagnosticsScreen';
 import type { Dict } from './i18n/ru';
@@ -19,6 +20,7 @@ type ScreenId =
   | 'resonances'
   | 'snapshots'
   | 'generator'
+  | 'transfer'
   | 'settings'
   | 'diagnostics';
 
@@ -47,6 +49,7 @@ const SCREENS: ScreenDef[] = [
   },
   { id: 'snapshots', icon: '📁', label: (t) => t.nav.snapshots, render: () => <SnapshotsScreen /> },
   { id: 'generator', icon: '〰️', label: (t) => t.nav.generator, render: () => <GeneratorScreen /> },
+  { id: 'transfer', icon: '⇄', label: (t) => t.nav.transfer, render: () => <TransferScreen /> },
   { id: 'settings', icon: '⚙️', label: (t) => t.nav.settings, render: () => <SettingsScreen /> },
   {
     id: 'diagnostics',

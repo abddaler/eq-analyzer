@@ -112,7 +112,13 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     setStarting(true);
     try {
-      await source.start({ deviceId: deviceId || undefined, bufferSeconds: 6 });
+      await source.start({
+        deviceId: deviceId || undefined,
+        bufferSeconds: 6,
+        // Two-channel mode needs a stereo input; the engine checks what the
+        // device actually delivered before enabling the transfer function.
+        channelCount: settings.dualChannel ? 2 : 1,
+      });
       engine.attach(source);
       engine.update(settings);
       setRunning(true);
@@ -167,6 +173,19 @@ export function EngineProvider({ children }: { children: React.ReactNode }) {
   const update = useCallback((patch: Partial<EngineSettings>) => {
     setSettings((prev) => ({ ...prev, ...patch }));
   }, []);
+
+  // Changing the channel count means reopening the stream.
+  const dualChannel = settings.dualChannel;
+  const restartRef = useRef(dualChannel);
+  useEffect(() => {
+    if (restartRef.current === dualChannel) return;
+    restartRef.current = dualChannel;
+    if (!running) return;
+    void (async () => {
+      await stop();
+      await start();
+    })();
+  }, [dualChannel, running, start, stop]);
 
   const value = useMemo<EngineContextValue>(
     () => ({

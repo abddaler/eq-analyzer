@@ -19,6 +19,7 @@ import {
 import { LowBandRefiner, longFftSizeFor } from './multires';
 import { ResonanceDetector, type Resonance } from './peaks';
 import { MIN_POWER, powerToDb, SpectrumAnalyzer } from './spectrum';
+import { gccPhatDelay, TransferFunction, type DelayEstimate, type TransferResult } from './transfer';
 import { weightingDb, weightingGains, weightedTotal, type Weighting } from './weighting';
 import type { WindowType } from './windows';
 
@@ -41,6 +42,12 @@ export interface EngineSettings {
   levelCalibration: LevelCalibration;
   /** Recompute the low bands from a longer FFT (see multires.ts). */
   multiResolution: boolean;
+  /** Two-channel mode: channel 1 is the console feed, channel 2 the mic. */
+  dualChannel: boolean;
+  /** Which captured channel carries the reference. */
+  referenceChannel: number;
+  /** Alignment between the two channels, in samples. */
+  transferDelaySamples: number;
   /** Narrow-peak detector: how far above the local median counts as a peak. */
   resonanceThresholdDb: number;
   /** How long a peak has to hold before it is named. */
@@ -60,6 +67,9 @@ export const DEFAULT_SETTINGS: EngineSettings = {
   micProfile: null,
   levelCalibration: { splAt0dBFS: null },
   multiResolution: true,
+  dualChannel: false,
+  referenceChannel: 0,
+  transferDelaySamples: 0,
   resonanceThresholdDb: 10,
   resonanceMinDurationMs: 300,
 };
@@ -111,6 +121,12 @@ export interface EngineSnapshot {
   levels: Levels;
   /** Narrow peaks currently ringing, strongest first. */
   resonances: Resonance[];
+  /** Two-channel result, null unless dual-channel mode is running. */
+  transfer: TransferResult | null;
+  transferDelayMs: number;
+  transferFrames: number;
+  /** True when the source really delivers two channels. */
+  dualChannelActive: boolean;
   elapsedSeconds: number;
   frames: number;
 }
@@ -157,6 +173,11 @@ export class AnalyzerEngine {
   private noiseAverager: LinearAverager | null = null;
   private noiseFramesLeft = 0;
   private noiseFloor: Float64Array | null = null;
+  private transfer: TransferFunction | null = null;
+  private transferRef: Float32Array = new Float32Array(0);
+  private transferMeas: Float32Array = new Float32Array(0);
+  private nextTransferFrame = 0;
+  private lastTransferResult = 0;
   private refiner: LowBandRefiner | null = null;
   private nextLongFrame = 0;
   private detector = new ResonanceDetector();
@@ -202,6 +223,10 @@ export class AnalyzerEngine {
         splA: null,
       },
       resonances: [],
+      transfer: null,
+      transferDelayMs: 0,
+      transferFrames: 0,
+      dualChannelActive: false,
       elapsedSeconds: 0,
       frames: 0,
     };
@@ -253,7 +278,8 @@ export class AnalyzerEngine {
       (patch.longWindowSeconds !== undefined &&
         patch.longWindowSeconds !== this.settings.longWindowSeconds) ||
       (patch.averaging !== undefined && patch.averaging !== this.settings.averaging) ||
-      (patch.multiResolution !== undefined && patch.multiResolution !== this.settings.multiResolution);
+      (patch.multiResolution !== undefined && patch.multiResolution !== this.settings.multiResolution) ||
+      (patch.dualChannel !== undefined && patch.dualChannel !== this.settings.dualChannel);
     this.settings = { ...this.settings, ...patch };
     if (this.peakHold) this.peakHold.decayDbPerSecond = this.settings.peakDecayDbPerSecond;
     this.detector.configure({
@@ -286,6 +312,37 @@ export class AnalyzerEngine {
 
   resetPeakHold(): void {
     this.peakHold?.reset();
+  }
+
+  /**
+   * Estimate the alignment between the reference and the microphone from the
+   * last second and a bit of audio, and adopt it.
+   */
+  findDelay(): DelayEstimate | null {
+    const buffer = this.source?.buffer;
+    const rate = this.analyser?.sampleRate;
+    if (!buffer || !rate || buffer.channelCount < 2) return null;
+    const length = Math.min(1 << 16, 1 << Math.floor(Math.log2(Math.max(1, buffer.written))));
+    if (length < 4096) return null;
+    const start = buffer.written - length;
+    const reference = new Float32Array(length);
+    const measurement = new Float32Array(length);
+    const refChannel = this.settings.referenceChannel;
+    if (!buffer.read(start, reference, refChannel)) return null;
+    if (!buffer.read(start, measurement, refChannel === 0 ? 1 : 0)) return null;
+    const estimate = gccPhatDelay(reference, measurement, rate, length);
+    this.settings = { ...this.settings, transferDelaySamples: estimate.delaySamples };
+    this.transfer?.reset();
+    this.nextTransferFrame = 0;
+    return estimate;
+  }
+
+  resetTransfer(): void {
+    this.transfer?.reset();
+    this.nextTransferFrame = 0;
+    this.snapshot.transfer = null;
+    this.snapshot.transferFrames = 0;
+    this.publishSoon();
   }
 
   /** The ring-out list: peaks that have already stopped. */
@@ -356,6 +413,13 @@ export class AnalyzerEngine {
         )
       : null;
     this.nextLongFrame = 0;
+
+    const channels = this.source?.buffer?.channelCount ?? 1;
+    const dualActive = this.settings.dualChannel && channels >= 2;
+    this.transfer = dualActive ? new TransferFunction(fftSize, rate, windowType) : null;
+    this.transferRef = dualActive ? new Float32Array(fftSize) : new Float32Array(0);
+    this.transferMeas = dualActive ? new Float32Array(fftSize) : new Float32Array(0);
+    this.nextTransferFrame = 0;
     this.noiseFloor = null;
     this.detector.reset();
     this.nextFrame = 0;
@@ -372,6 +436,9 @@ export class AnalyzerEngine {
       binWidth: this.analyser.binWidth,
       enbwBins: this.analyser.enbwBins,
       binCount: bins,
+      dualChannelActive: this.transfer !== null,
+      transfer: null,
+      transferFrames: 0,
       lowBandFftSize: this.refiner && this.refiner.bandCount > 0 ? this.refiner.fftSize : 0,
       lowBandCrossoverHz: this.refiner && this.refiner.bandCount > 0 ? this.refiner.crossoverHz : 0,
       binPower: new Float64Array(bins),
@@ -457,6 +524,8 @@ export class AnalyzerEngine {
       }
     }
 
+    this.updateTransfer(buffer, size, hop);
+
     let processed = 0;
     const dt = this.frameSeconds;
     while (this.nextFrame + size <= buffer.written && processed < 8) {
@@ -500,6 +569,47 @@ export class AnalyzerEngine {
 
     if (processed > 0) this.updateSnapshot();
     this.publish();
+  }
+
+  /**
+   * Feed time-aligned frame pairs to the transfer estimator.
+   *
+   * The microphone hears the console's signal `delay` samples late, so the
+   * reference frame at `start` is compared against the measurement frame at
+   * `start + delay`. Without that alignment the phase would wrap many times
+   * per octave and coherence would collapse.
+   */
+  private updateTransfer(
+    buffer: NonNullable<AudioSource['buffer']>,
+    size: number,
+    hop: number,
+  ): void {
+    const transfer = this.transfer;
+    if (!transfer) return;
+    const delay = Math.round(this.settings.transferDelaySamples);
+    const refChannel = this.settings.referenceChannel;
+    const measChannel = refChannel === 0 ? 1 : 0;
+    const earliest = Math.max(buffer.oldest, buffer.oldest - Math.min(0, delay));
+
+    if (this.nextTransferFrame < earliest) {
+      this.nextTransferFrame = Math.max(earliest, buffer.written - size - Math.max(delay, 0));
+    }
+    let processed = 0;
+    while (
+      this.nextTransferFrame + size <= buffer.written &&
+      this.nextTransferFrame + delay + size <= buffer.written &&
+      processed < 4
+    ) {
+      const start = this.nextTransferFrame;
+      if (
+        buffer.read(start, this.transferRef, refChannel) &&
+        buffer.read(start + delay, this.transferMeas, measChannel)
+      ) {
+        transfer.push(this.transferRef, this.transferMeas);
+      }
+      this.nextTransferFrame += hop;
+      processed++;
+    }
   }
 
   private updateSnapshot(): void {
@@ -548,6 +658,22 @@ export class AnalyzerEngine {
       splA: levelToSpl(aDb, cal),
     };
     s.resonances = this.detector.active();
+
+    if (this.transfer) {
+      const rate = this.analyser?.sampleRate ?? 48000;
+      s.transferFrames = this.transfer.frames;
+      s.transferDelayMs = (this.settings.transferDelaySamples / rate) * 1000;
+      // Building the result allocates three arrays; the eye does not need it
+      // more often than a few times a second.
+      const now = performance.now();
+      if (this.transfer.frames > 0 && now - this.lastTransferResult > 250) {
+        this.lastTransferResult = now;
+        s.transfer = this.transfer.result();
+      }
+    } else {
+      s.transfer = null;
+      s.transferFrames = 0;
+    }
     s.running = true;
     s.frozen = this.frozenFlag;
     s.revision++;

@@ -120,3 +120,22 @@ export function getFFT(size: number): FFT {
   }
   return f;
 }
+
+/**
+ * Forward transform of a real signal into caller-supplied complex arrays.
+ * Kept separate from realMagnitudeSquared because the transfer function needs
+ * the phase, not just the magnitude.
+ */
+export function realForward(
+  fft: FFT,
+  input: ArrayLike<number>,
+  re: Float64Array,
+  im: Float64Array,
+): void {
+  const n = fft.size;
+  for (let i = 0; i < n; i++) {
+    re[i] = input[i] ?? 0;
+    im[i] = 0;
+  }
+  fft.transform(re, im);
+}
