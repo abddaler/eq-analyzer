@@ -9,6 +9,7 @@ import { useT } from '../../i18n';
 import { Canvas } from '../components/Canvas';
 import { clearPlot, drawGrid, freqToX, dbToY } from '../plot';
 import { cssVar } from '../theme';
+import { PerfMeter } from '../components/PerfMeter';
 
 const FFT_SIZE = 8192;
 const HF_CHECK_SECONDS = 5;
@@ -438,6 +439,8 @@ export function DiagnosticsScreen() {
           </div>
         </>
       )}
+
+      <PerfMeter />
 
       <div className="card">
         <div className="card__title">

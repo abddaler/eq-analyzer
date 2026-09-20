@@ -216,9 +216,22 @@ export function SettingsScreen() {
         </div>
       </div>
 
-      <div className="card">
+      <div className="card col">
         <div className="card__title">{t.settings.about}</div>
         <p className="small muted">{t.settings.aboutText}</p>
+        <button
+          className="btn--ghost btn--small"
+          onClick={() => {
+            try {
+              localStorage.removeItem('eqscope.onboarded');
+            } catch {
+              // ignore
+            }
+            location.reload();
+          }}
+        >
+          {t.settings.showOnboarding}
+        </button>
       </div>
     </div>
   );

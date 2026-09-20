@@ -368,3 +368,60 @@ canvas { display: block; touch-action: none; }
   flex-direction: column;
   gap: 8px;
 }
+
+/* ---------- onboarding ---------- */
+
+.onboarding {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: auto;
+}
+
+.onboarding__card {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.onboarding__icon {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.onboarding__dots {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  padding: 6px 0;
+}
+
+.onboarding__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.onboarding__dot--on { background: var(--accent); }
+
+/* ---------- landscape ---------- */
+
+/*
+ * Landscape is the working orientation for the graph: the room is dark, the
+ * phone is on the desk, and the spectrum should own the screen.
+ */
+@media (orientation: landscape) and (max-height: 500px) {
+  .screen { padding: 8px; gap: 8px; }
+  .nav { padding: 2px; }
+  .nav__item { min-width: 52px; min-height: 40px; font-size: 0; gap: 0; }
+  .nav__icon { font-size: 19px; }
+  h1 { font-size: 17px; }
+}

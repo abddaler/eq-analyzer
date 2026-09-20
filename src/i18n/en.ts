@@ -41,6 +41,34 @@ export const en: Dict = {
     notSupported: 'This browser lacks AudioWorklet or getUserMedia. A recent Safari / Chrome over HTTPS is required.',
     insecure: 'The microphone is only available over HTTPS (or on localhost).',
   },
+  onboarding: {
+    skip: 'Skip',
+    step: (n: number, total: number) => `${n} of ${total}`,
+    placeTitle: 'Where to put the phone',
+    placeBody:
+      'At the listening position: the FOH desk or the middle of the room, at ear height. Do not cover the microphone with a hand or a case, and do not put the phone against a wall or on the edge of a table — reflections add dips and humps that are not in the room. Point the microphone at the stage.',
+    placeTip: 'A stand beats a hand: a hand moves, and the measurement moves with it.',
+    trustTitle: 'What not to trust',
+    trustBody:
+      'A phone microphone is reasonably flat from about 100 Hz to 10 kHz. Below 80 Hz it rolls off, and the app does not know by how much on your particular phone — that area is shaded on the graph and takes no part in the suggestions. System processing (noise suppression, auto gain) breaks a measurement: check it on the diagnostics screen.',
+    trustTip: 'If a suggestion about the sub looks odd, it is probably the microphone, not the sound.',
+    micTitle: 'Why a measurement microphone',
+    micBody:
+      'An omnidirectional measurement microphone with a calibration file (a UMIK-1, say) is flat from 20 Hz and connects over USB like any audio interface. With one, the low end becomes measurable and the suggestions apply to the system rather than to the phone.',
+    micTip: 'Import the calibration file in Settings: "Import a calibration file".',
+    honestTitle: 'And the main thing',
+    honestBody:
+      'The app shows the deviation from a target you chose, not "correct sound". You pick the target and you make the call. Each card shows how much the measurement can be trusted — if that is low, find out why before acting on it.',
+    start: 'Start',
+  },
+  perf: {
+    title: 'Performance',
+    fps: 'Frames per second',
+    engineFps: 'Analysis frames per second',
+    heap: 'JS memory',
+    heapUnavailable: 'not reported by this browser',
+    hint: 'The target is at least 30 frames per second and steady memory over 30 minutes.',
+  },
   generator: {
     title: 'Generator',
     warning:
@@ -277,6 +305,7 @@ export const en: Dict = {
     theme: 'Theme',
     themeDark: 'Dark',
     themeNight: 'Night (red)',
+    showOnboarding: 'Show the intro again',
     about: 'About',
     aboutText:
       'EQ Scope shows the deviation from a chosen target, not "correct sound". The decision is always your ears.',

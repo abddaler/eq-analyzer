@@ -5,6 +5,7 @@ async function openApp(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('eqscope.locale', 'ru');
     localStorage.setItem('eqscope.theme', 'dark');
+    localStorage.setItem('eqscope.onboarded', '1');
   });
   await page.goto('/');
 }
@@ -81,6 +82,25 @@ test('a snapshot survives a round trip through IndexedDB', async ({ page }) => {
   await page.reload();
   await page.getByRole('button', { name: 'Снимки' }).click();
   await expect(page.getByText('Проверка')).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
+
+test('onboarding is shown once and then stays out of the way', async ({ page }) => {
+  const errors = collectErrors(page);
+  // A fresh install: no "onboarded" flag.
+  await page.addInitScript(() => localStorage.setItem('eqscope.locale', 'ru'));
+  await page.goto('/');
+
+  await expect(page.getByText('Куда поставить телефон')).toBeVisible();
+  for (const label of ['Далее', 'Далее', 'Далее', 'Начать']) {
+    await page.getByRole('button', { name: label, exact: true }).click();
+  }
+  await expect(page.getByRole('button', { name: 'Старт' })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Старт' })).toBeVisible();
+  await expect(page.getByText('Куда поставить телефон')).toHaveCount(0);
 
   expect(errors).toEqual([]);
 });

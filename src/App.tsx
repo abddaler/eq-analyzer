@@ -11,6 +11,7 @@ import { GeneratorScreen } from './ui/screens/GeneratorScreen';
 import { SettingsScreen } from './ui/screens/SettingsScreen';
 import { DiagnosticsScreen } from './ui/screens/DiagnosticsScreen';
 import type { Dict } from './i18n/ru';
+import { hasSeenOnboarding, Onboarding } from './ui/components/Onboarding';
 
 type ScreenId =
   | 'rta'
@@ -61,12 +62,15 @@ export function App() {
   const [screen, setScreen] = useState<ScreenId>('rta');
   const [theme, setTheme] = useTheme();
   const { running, stop } = useEngine();
+  const [onboarding, setOnboarding] = useState(() => !hasSeenOnboarding());
   const active = SCREENS.find((s) => s.id === screen) ?? SCREENS[0];
 
   // Two capture sessions on one microphone fight each other on mobile Safari.
   useEffect(() => {
     if (active.exclusiveCapture && running) void stop();
   }, [active, running, stop]);
+
+  if (onboarding) return <Onboarding onDone={() => setOnboarding(false)} />;
 
   return (
     <div className="app">
