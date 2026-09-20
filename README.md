@@ -101,9 +101,28 @@ tests          юнит-тесты DSP и анализа
 
 ## Деплой
 
-Cloudflare Pages: build command `npm run build`, output `dist`.
+Cloudflare Pages, настройки проекта:
+
+| Параметр | Значение |
+|---|---|
+| Framework preset | None (или Vite) |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+| Root directory | пусто (корень репозитория) |
+| Production branch | ветка, в которой лежит код |
+
+Версия Node задана файлом `.node-version` (22): Vite требует
+`^20.19 || >=22.12`, а по умолчанию Pages может поднять Node 18 — тогда
+сборка падает ещё на установке зависимостей. Если версия всё равно не та,
+продублируйте её переменной окружения `NODE_VERSION = 22` в настройках
+проекта.
+
 `public/_headers` и `public/_redirects` уже настроены (SPA-фоллбэк,
-`no-cache` для `index.html` и `sw.js`, вечный кеш для хешированных ассетов).
+`no-cache` для `index.html` и `sw.js`, вечный кеш для хешированных ассетов)
+и попадают в `dist` при сборке.
+
+Микрофон работает только по HTTPS — домен `*.pages.dev` это условие
+выполняет.
 
 ## Платформа
 
