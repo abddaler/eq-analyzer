@@ -5,6 +5,25 @@ import { SpectrumPlot, type CursorReadout, type PlotMode } from '../components/S
 import { Segmented, Toggle } from '../components/Controls';
 import { OCTAVE_FRACTIONS, formatFrequency, type OctaveFraction } from '../../dsp/octave';
 import { LONG_WINDOW_SECONDS, type AveragingMode } from '../../dsp/engine';
+import { useSuggestions } from '../useSuggestions';
+import { SuggestionCard, type SuggestMode } from '../components/SuggestionCards';
+import { BUILTIN_TARGETS } from '../../analysis/targets';
+import type { Dict } from '../../i18n/ru';
+
+const TARGET_KEY = 'eqscope.target';
+const SUGGEST_MODE_KEY = 'eqscope.suggestMode';
+
+function stored(key: string, fallback: string): string {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function targetName(t: Dict, id: string): string {
+  return id === 'flat' || id === 'live' || id === 'speech' ? t.targets[id] : id;
+}
 
 export function RtaScreen() {
   const t = useT();
@@ -15,6 +34,29 @@ export function RtaScreen() {
   const [mode, setMode] = useState<PlotMode>('rta');
   const [pinkComp, setPinkComp] = useState(false);
   const [cursor, setCursor] = useState<CursorReadout | null>(null);
+  const [targetId, setTargetId] = useState(() => stored(TARGET_KEY, 'live'));
+  const [suggestMode, setSuggestMode] = useState<SuggestMode>(
+    () => stored(SUGGEST_MODE_KEY, 'simple') as SuggestMode,
+  );
+  const { suggestions, targetDb, windowFill, ready } = useSuggestions(targetId);
+
+  const chooseTarget = (id: string) => {
+    setTargetId(id);
+    try {
+      localStorage.setItem(TARGET_KEY, id);
+    } catch {
+      // ignore
+    }
+  };
+
+  const chooseSuggestMode = (m: SuggestMode) => {
+    setSuggestMode(m);
+    try {
+      localStorage.setItem(SUGGEST_MODE_KEY, m);
+    } catch {
+      // ignore
+    }
+  };
 
   const s = engine.snapshot;
   const trustedFrom = settings.micProfile?.trustedFromHz ?? 20;
@@ -58,6 +100,8 @@ export function RtaScreen() {
           showPeakHold={settings.peakHoldEnabled && mode === 'rta'}
           showNoiseFloor
           pinkCompensation={pinkComp && mode === 'fft'}
+          target={mode === 'rta' ? targetDb : null}
+          useLongAverage
           trustedFromHz={trustedFrom}
           height="40vh"
           onCursor={onCursor}
@@ -78,6 +122,48 @@ export function RtaScreen() {
         </div>
         {cursor && !cursor.trusted && (
           <div className="note note--warn small">{t.rta.untrustedBelow(trustedFrom)}</div>
+        )}
+      </div>
+
+      <div className="card col">
+        <div className="row row--between">
+          <span className="small muted">{t.targets.label}</span>
+          <select value={targetId} onChange={(e) => chooseTarget(e.target.value)}>
+            {BUILTIN_TARGETS.map((c) => (
+              <option key={c.id} value={c.id}>
+                {targetName(t, c.id)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="row row--between">
+          <span className="small muted">{t.suggest.title}</span>
+          <Segmented
+            value={suggestMode}
+            onChange={chooseSuggestMode}
+            options={[
+              { value: 'simple' as SuggestMode, label: t.suggest.modeSimple },
+              { value: 'pro' as SuggestMode, label: t.suggest.modePro },
+            ]}
+          />
+        </div>
+        <div className="faint small">{t.targets.hint}</div>
+      </div>
+
+      <div className="suggestions">
+        {!running ? (
+          <div className="note">{t.suggest.notRunning}</div>
+        ) : !ready ? (
+          <div className="note">
+            {t.suggest.warmingUp(windowFill * settings.longWindowSeconds, settings.longWindowSeconds)}
+          </div>
+        ) : suggestions.length === 0 ? (
+          <div className="note note--ok">{t.suggest.empty}</div>
+        ) : (
+          suggestions.map((s) => <SuggestionCard key={s.id} suggestion={s} mode={suggestMode} />)
+        )}
+        {running && ready && suggestions.length > 0 && (
+          <div className="faint small">{t.suggest.disclaimer}</div>
         )}
       </div>
 

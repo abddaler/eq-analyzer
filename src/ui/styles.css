@@ -351,3 +351,20 @@ canvas { display: block; touch-action: none; }
   border-radius: var(--radius);
   overflow: hidden;
 }
+
+/* ---------- suggestions ---------- */
+
+.suggestion {
+  border-left: 3px solid var(--line-strong);
+}
+
+.suggestion__arrow {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

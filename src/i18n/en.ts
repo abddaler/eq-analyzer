@@ -41,6 +41,85 @@ export const en: Dict = {
     notSupported: 'This browser lacks AudioWorklet or getUserMedia. A recent Safari / Chrome over HTTPS is required.',
     insecure: 'The microphone is only available over HTTPS (or on localhost).',
   },
+  zones: {
+    sub: 'Sub',
+    bass: 'Bass',
+    lowMid: 'Low mids',
+    mid: 'Mids',
+    upperMid: 'Upper mids',
+    presence: 'Presence',
+    air: 'Air',
+  },
+  /** Used inside sentences like "Pull back the low mids". */
+  zonesAccusative: {
+    sub: 'the sub',
+    bass: 'the bass',
+    lowMid: 'the low mids',
+    mid: 'the mids',
+    upperMid: 'the upper mids',
+    presence: 'the presence',
+    air: 'the air',
+  },
+  zoneExcess: {
+    sub: 'boomy, pressing',
+    bass: 'thick, heavy',
+    lowMid: 'muddy, boxy',
+    mid: 'nasal, telephone-like',
+    upperMid: 'harsh, tiring',
+    presence: 'hard, edgy',
+    air: 'hissy, sibilant',
+  },
+  zoneDeficit: {
+    sub: 'no foundation',
+    bass: 'thin',
+    lowMid: 'hollow',
+    mid: 'scooped, distant',
+    upperMid: 'no intelligibility',
+    presence: 'dull',
+    air: 'closed in',
+  },
+  targets: {
+    label: 'Target',
+    flat: 'Flat (pink noise)',
+    live: 'Live music',
+    speech: 'Speech',
+    snapshot: 'Reference snapshot',
+    custom: 'Custom curve',
+    hint: 'Suggestions are relative to the chosen target, not to "correct sound".',
+  },
+  suggest: {
+    title: 'Suggestions',
+    modeSimple: 'Simple',
+    modePro: 'Pro',
+    empty: 'Nothing deviates by more than 3 dB — the balance matches the target.',
+    warmingUp: (filled: number, total: number) =>
+      `Collecting material: ${filled.toFixed(0)} of ${total} s. Suggestions appear once the average settles.`,
+    notRunning: 'Start measuring to get suggestions.',
+    cut: 'Pull back',
+    boost: 'Add',
+    slight: 'slightly',
+    noticeable: 'noticeably',
+    range: (lo: number, hi: number) => `${lo}–${hi} Hz`,
+    excessBy: (db: number) => `${db.toFixed(1)} dB too much`,
+    deficitBy: (db: number) => `${db.toFixed(1)} dB short`,
+    parametric: 'Parametric',
+    parametricValue: (hz: string, gain: number, q: number) =>
+      `${hz} Hz · ${gain > 0 ? '+' : ''}${gain.toFixed(1)} dB · Q ${q.toFixed(2)}`,
+    geq: '31-band EQ',
+    confidence: 'Confidence',
+    confidenceHigh: 'high',
+    confidenceMedium: 'medium',
+    confidenceLow: 'low',
+    confidenceWhy: (seconds: number, snr: number | null, untrusted: boolean) => {
+      const parts = [`${seconds.toFixed(0)} s accumulated`];
+      if (snr !== null && Number.isFinite(snr)) parts.push(`${snr.toFixed(0)} dB above the noise floor`);
+      else parts.push('noise floor not measured');
+      if (untrusted) parts.push('the region reaches into what the microphone cannot measure');
+      return parts.join(' · ');
+    },
+    disclaimer:
+      'This is advice relative to a target, not a verdict. Check it with your ears — especially in the low end and when the noise floor has not been measured.',
+  },
   rta: {
     title: 'Spectrum',
     startHint: 'Press Start, allow microphone access, and place the phone at the listening position with the mic facing the stage.',

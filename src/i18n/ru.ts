@@ -44,6 +44,85 @@ export const ru = {
     notSupported: 'Браузер не поддерживает AudioWorklet или getUserMedia. Нужен современный Safari / Chrome по HTTPS.',
     insecure: 'Микрофон доступен только по HTTPS (или на localhost).',
   },
+  zones: {
+    sub: 'Саб',
+    bass: 'Низ',
+    lowMid: 'Низкая середина',
+    mid: 'Середина',
+    upperMid: 'Верхняя середина',
+    presence: 'Присутствие',
+    air: 'Воздух',
+  },
+  /** Винительный падеж — для фраз вида «Прибери низкую середину». */
+  zonesAccusative: {
+    sub: 'саб',
+    bass: 'низ',
+    lowMid: 'низкую середину',
+    mid: 'середину',
+    upperMid: 'верхнюю середину',
+    presence: 'присутствие',
+    air: 'воздух',
+  },
+  zoneExcess: {
+    sub: 'гул, «давит»',
+    bass: 'бубнит, тяжело',
+    lowMid: 'каша, «коробка»',
+    mid: '«гнусаво», звук как из телефона',
+    upperMid: 'режет, утомляет',
+    presence: 'жёстко, резко',
+    air: 'шипит, сибилянты',
+  },
+  zoneDeficit: {
+    sub: 'нет фундамента',
+    bass: 'тонко',
+    lowMid: 'пусто',
+    mid: 'провал, звук далеко',
+    upperMid: 'нет разборчивости',
+    presence: 'тускло',
+    air: 'глухо',
+  },
+  targets: {
+    label: 'Цель',
+    flat: 'Ровная (розовый шум)',
+    live: 'Живой звук',
+    speech: 'Речь',
+    snapshot: 'Эталонный снимок',
+    custom: 'Своя кривая',
+    hint: 'Подсказки считаются относительно выбранной цели, а не «правильного звука».',
+  },
+  suggest: {
+    title: 'Подсказки',
+    modeSimple: 'Просто',
+    modePro: 'Профи',
+    empty: 'Отклонений больше 3 дБ нет — по выбранной цели баланс в норме.',
+    warmingUp: (filled: number, total: number) =>
+      `Накапливаем материал: ${filled.toFixed(0)} из ${total} с. Подсказки появятся, когда среднее станет устойчивым.`,
+    notRunning: 'Запустите замер, чтобы получить подсказки.',
+    cut: 'Прибери',
+    boost: 'Добавь',
+    slight: 'слегка',
+    noticeable: 'заметно',
+    range: (lo: number, hi: number) => `${lo}–${hi} Гц`,
+    excessBy: (db: number) => `завышено на ${db.toFixed(1)} дБ`,
+    deficitBy: (db: number) => `занижено на ${db.toFixed(1)} дБ`,
+    parametric: 'Параметрик',
+    parametricValue: (hz: string, gain: number, q: number) =>
+      `${hz} Гц · ${gain > 0 ? '+' : ''}${gain.toFixed(1)} дБ · Q ${q.toFixed(2)}`,
+    geq: '31-полосный EQ',
+    confidence: 'Достоверность',
+    confidenceHigh: 'высокая',
+    confidenceMedium: 'средняя',
+    confidenceLow: 'низкая',
+    confidenceWhy: (seconds: number, snr: number | null, untrusted: boolean) => {
+      const parts = [`накоплено ${seconds.toFixed(0)} с`];
+      if (snr !== null && Number.isFinite(snr)) parts.push(`запас над шумом ${snr.toFixed(0)} дБ`);
+      else parts.push('порог шума не замерен');
+      if (untrusted) parts.push('область задевает зону, недоступную микрофону');
+      return parts.join(' · ');
+    },
+    disclaimer:
+      'Это подсказка относительно цели, а не приговор. Проверяйте ушами — особенно на низах и при неизмеренном пороге шума.',
+  },
   rta: {
     title: 'Спектр',
     startHint: 'Нажмите «Старт», разрешите доступ к микрофону и положите телефон в точке прослушивания микрофоном к сцене.',
