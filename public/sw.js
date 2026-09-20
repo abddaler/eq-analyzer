@@ -5,12 +5,25 @@
  * hashed asset names, so "cache everything same-origin, serve from cache,
  * refresh in the background" is both correct and about twenty lines.
  */
-const CACHE = 'eq-scope-v1';
-const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/icon-192.png'];
+const CACHE = 'eq-scope-v2';
+
+/*
+ * Paths are resolved against the worker's own location, not against the
+ * origin root: the same file has to work at https://host/ and at
+ * https://host/eq-analyzer/.
+ */
+const SHELL = ['./', './index.html', './manifest.webmanifest', './favicon.svg', './icon-192.png'].map(
+  (path) => new URL(path, self.location).pathname,
+);
+const SHELL_URL = new URL('./index.html', self.location).pathname;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()),
+    caches
+      .open(CACHE)
+      // One missing file must not prevent the worker from installing at all.
+      .then((cache) => Promise.all(SHELL.map((path) => cache.add(path).catch(() => undefined))))
+      .then(() => self.skipWaiting()),
   );
 });
 
@@ -36,10 +49,10 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((response) => {
           const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put('/index.html', copy));
+          caches.open(CACHE).then((cache) => cache.put(SHELL_URL, copy));
           return response;
         })
-        .catch(() => caches.match('/index.html').then((r) => r ?? Response.error())),
+        .catch(() => caches.match(SHELL_URL).then((r) => r ?? Response.error())),
     );
     return;
   }
