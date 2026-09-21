@@ -3,6 +3,7 @@ import type { AnalyzerEngine, EngineSnapshot } from '../../dsp/engine';
 import { powerToDb } from '../../dsp/spectrum';
 import { frequencyToNote, nearestGeqBand } from '../../dsp/notes';
 import { GEQ_31_BANDS, formatFrequency } from '../../dsp/octave';
+import { MIN_SNR_DB } from '../../analysis/confidence';
 import { Canvas, type PointerInfo } from './Canvas';
 import { clearPlot, drawDbLabels, drawGrid, dbToY, freqToX, xToFreq } from '../plot';
 import { cssVar } from '../theme';
@@ -31,6 +32,8 @@ interface Props {
   useLongAverage?: boolean;
   /** Lowest frequency the microphone can be trusted at. */
   trustedFromHz: number;
+  /** Highest frequency the microphone can be trusted at. */
+  trustedToHz?: number;
   height?: number | string;
   onCursor?: (readout: CursorReadout | null) => void;
   canvasRef?: React.MutableRefObject<HTMLCanvasElement | null>;
@@ -54,6 +57,7 @@ export function SpectrumPlot({
   target,
   useLongAverage = false,
   trustedFromHz,
+  trustedToHz = 20000,
   height = 260,
   onCursor,
   canvasRef,
@@ -104,7 +108,7 @@ export function SpectrumPlot({
       }
 
       if (mode === 'rta') {
-        drawBands(ctx, w, h, s, levels, dbMin, dbMax, trustedFromHz, target ?? null);
+        drawBands(ctx, w, h, s, levels, dbMin, dbMax, trustedFromHz, trustedToHz, target ?? null);
         if (showPeakHold) drawPeakHold(ctx, w, h, s, dbMin, dbMax);
       } else {
         drawFft(ctx, w, h, s, dbMin, dbMax, pinkCompensation);
@@ -153,7 +157,17 @@ export function SpectrumPlot({
         ctx.stroke();
       }
     },
-    [engine, mode, pinkCompensation, showNoiseFloor, showPeakHold, target, trustedFromHz, useLongAverage],
+    [
+      engine,
+      mode,
+      pinkCompensation,
+      showNoiseFloor,
+      showPeakHold,
+      target,
+      trustedFromHz,
+      trustedToHz,
+      useLongAverage,
+    ],
   );
 
   const handlePointer = useCallback(
@@ -215,6 +229,7 @@ function drawBands(
   dbMin: number,
   dbMax: number,
   trustedFromHz: number,
+  trustedToHz: number,
   target: Float64Array | null,
 ): void {
   const trace = cssVar('--trace', '#8be04e');
@@ -230,7 +245,14 @@ function drawBands(
     const level = levels[b] + s.bandWeightingDb[b];
     const y = dbToY(level, dbMin, dbMax, h);
     const width = Math.max(1, x1 - x0 - 1);
-    const trusted = band.center >= trustedFromHz;
+    // Same rule the suggestions use, so the picture and the advice cannot
+    // disagree: outside the microphone's range, or too close to the measured
+    // noise floor, a band is not a measurement. In a quiet room this is what
+    // separates "there is a lot of bass" from "that is the room's own rumble".
+    const trusted =
+      band.center >= trustedFromHz &&
+      band.center <= trustedToHz &&
+      (!s.noiseFloorDb || levels[b] >= s.noiseFloorDb[b] + MIN_SNR_DB);
 
     if (target) {
       // Colour by deviation so the eye lands on the problem, not the level.

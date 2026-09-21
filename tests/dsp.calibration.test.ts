@@ -33,12 +33,13 @@ describe('response interpolation', () => {
 });
 
 describe('correction gains', () => {
-  it('invert the microphone response', () => {
-    // The generic phone profile is 14 dB down at 40 Hz, so the correction
-    // has to add 14 dB back - just inside the boost cap.
-    const gains = correctionGains(PHONE_GENERIC, [40, 1000]);
-    expect(10 * Math.log10(gains[0])).toBeCloseTo(14, 6);
+  it('invert the microphone response inside the trusted range', () => {
+    // The generic phone profile is 1 dB down at 100 Hz and 2 dB up at
+    // 12.5 kHz; both are inside its trusted range, so both are undone.
+    const gains = correctionGains(PHONE_GENERIC, [100, 1000, 12500]);
+    expect(10 * Math.log10(gains[0])).toBeCloseTo(1, 6);
     expect(10 * Math.log10(gains[1])).toBeCloseTo(0, 6);
+    expect(10 * Math.log10(gains[2])).toBeCloseTo(-2, 1);
   });
 
   it('are unity without a profile', () => {
@@ -117,5 +118,53 @@ describe('correction limits', () => {
     };
     expect(10 * Math.log10(correctionGains(umik, [20])[0])).toBeCloseTo(2.5, 6);
     expect(10 * Math.log10(correctionGains(umik, [20000])[0])).toBeCloseTo(-3, 6);
+  });
+});
+
+describe('correction outside the trusted range', () => {
+  it('does not invent low end from a class-average phone profile', () => {
+    // The profile says the capsule is 30 dB down at 20 Hz. Correcting that
+    // literally would add 15 dB (the cap) to bands the app simultaneously
+    // marks as untrusted - a wall of bass that is not in the room.
+    const gains = correctionGains(PHONE_GENERIC, [20, 31.5, 40, 63]);
+    for (const g of gains) {
+      expect(10 * Math.log10(g)).toBeLessThan(3);
+    }
+  });
+
+  it('holds the correction at the edge of the trusted range', () => {
+    const atEdge = 10 * Math.log10(correctionGains(PHONE_GENERIC, [PHONE_GENERIC.trustedFromHz])[0]);
+    const below = 10 * Math.log10(correctionGains(PHONE_GENERIC, [20])[0]);
+    expect(below).toBeCloseTo(atEdge, 6);
+  });
+
+  it('still corrects everywhere inside the trusted range', () => {
+    // 12.5 kHz is inside the range and the profile is 2 dB up there.
+    expect(10 * Math.log10(correctionGains(PHONE_GENERIC, [12500])[0])).toBeCloseTo(-2, 1);
+  });
+
+  it('applies a real calibration file across its whole measured range', () => {
+    const umik = {
+      id: 'umik',
+      name: 'umik',
+      approximate: false,
+      trustedFromHz: 20,
+      trustedToHz: 20000,
+      points: [
+        { f: 20, db: -2.5 },
+        { f: 1000, db: 0 },
+        { f: 20000, db: 3 },
+      ],
+    };
+    expect(10 * Math.log10(correctionGains(umik, [20])[0])).toBeCloseTo(2.5, 6);
+    expect(10 * Math.log10(correctionGains(umik, [20000])[0])).toBeCloseTo(-3, 6);
+  });
+
+  it('leaves a flat third-octave signal flat', () => {
+    // The acceptance test that matters: pink noise is flat per third octave,
+    // so nothing the correction does may tilt it inside the trusted range.
+    const bands = [125, 250, 500, 1000, 2000, 4000, 8000];
+    const gains = Array.from(correctionGains(PHONE_GENERIC, bands), (g) => 10 * Math.log10(g));
+    expect(Math.max(...gains) - Math.min(...gains)).toBeLessThan(2);
   });
 });

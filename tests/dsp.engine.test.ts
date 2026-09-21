@@ -95,6 +95,30 @@ describe('AnalyzerEngine', () => {
     engine.detach();
   });
 
+  it('shows a flat signal as flat even with the phone profile on', () => {
+    // What the user actually sees. Pink noise is flat per third octave, so
+    // with the generic phone profile selected - the default - the picture
+    // must still be flat. A correction that invents 15 dB below 40 Hz turns
+    // a quiet room into a wall of bass that is not there.
+    const source = new FakeSource(pinkNoise(1 << 18, FS, 0.1, 15));
+    const engine = new AnalyzerEngine();
+    engine.attach(source);
+    engine.update({ averaging: 'infinite', micProfile: PHONE_GENERIC, fraction: 3 });
+    run(engine, source, 60, 4096);
+
+    const s = engine.snapshot;
+    const idx = s.bands
+      .map((b, i) => ({ b, i }))
+      .filter(({ b }) => b.nominal >= 20 && b.nominal <= 16000)
+      .map(({ i }) => i);
+    const levels = idx.map((i) => s.bandDb[i]);
+    const mean = levels.reduce((a, v) => a + v, 0) / levels.length;
+    for (let j = 0; j < levels.length; j++) {
+      expect(Math.abs(levels[j] - mean), `band ${s.bands[idx[j]].label}`).toBeLessThan(3);
+    }
+    engine.detach();
+  });
+
   it('applies the microphone correction to the bands it reports', () => {
     const signal = pinkNoise(1 << 18, FS, 0.1, 12);
     const plain = new AnalyzerEngine();
@@ -113,14 +137,14 @@ describe('AnalyzerEngine', () => {
       const i = e.snapshot.bands.findIndex((b) => b.nominal === nominal);
       return e.snapshot.bandDb[i];
     };
-    // The generic phone profile is 14 dB down at 40 Hz. The band spans
-    // 35-45 Hz and the profile is steep there, so the band-summed correction
-    // lands a little above the centre-frequency value rather than exactly on
-    // it - correcting energy, not a single point.
-    const lift = at(corrected, 40) - at(plain, 40);
-    expect(lift).toBeGreaterThan(13.5);
-    expect(lift).toBeLessThan(16);
+    // 100 Hz is inside the profile's trusted range and 1 dB down there, so
+    // the correction adds it back.
+    expect(at(corrected, 100) - at(plain, 100)).toBeCloseTo(1, 0);
     expect(at(corrected, 1000) - at(plain, 1000)).toBeCloseTo(0, 1);
+
+    // 40 Hz is below the range this profile can vouch for. The correction
+    // must not invent level there: whatever it does, it stays small.
+    expect(Math.abs(at(corrected, 40) - at(plain, 40))).toBeLessThan(3);
     plain.detach();
     corrected.detach();
   });

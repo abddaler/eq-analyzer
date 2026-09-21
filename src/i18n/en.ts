@@ -287,6 +287,8 @@ export const en: Dict = {
     resetAveraging: 'Reset averaging',
     peakHold: 'Peak hold',
     noiseFloor: 'Noise floor',
+    noiseFloorHint:
+      'After measuring, bands that do not rise at least 10 dB above the noise are drawn dim: that is the room\'s own background, not sound in it. In a quiet room almost the whole low end looks like this, and that is normal.',
     measureNoise: 'Measure silence',
     measuringNoise: (left: number) => `Measuring silence… ${left.toFixed(0)} s`,
     noiseMeasured: 'Noise floor captured',

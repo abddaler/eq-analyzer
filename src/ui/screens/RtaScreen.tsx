@@ -64,6 +64,7 @@ export function RtaScreen() {
 
   const s = engine.snapshot;
   const trustedFrom = settings.micProfile?.trustedFromHz ?? 20;
+  const trustedTo = settings.micProfile?.trustedToHz ?? 20000;
   const onCursor = useCallback((c: CursorReadout | null) => setCursor(c), []);
 
   // During warm-up there is no measurement yet, so show that rather than a
@@ -112,6 +113,7 @@ export function RtaScreen() {
           target={mode === 'rta' ? targetDb : null}
           useLongAverage
           trustedFromHz={trustedFrom}
+          trustedToHz={trustedTo}
           height="40vh"
           onCursor={onCursor}
           canvasRef={plotRef}
@@ -285,6 +287,7 @@ export function RtaScreen() {
             )}
           </div>
         </div>
+        <div className="faint small">{t.rta.noiseFloorHint}</div>
       </div>
     </div>
   );

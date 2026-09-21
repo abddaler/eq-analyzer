@@ -290,6 +290,8 @@ export const ru = {
     resetAveraging: 'Сбросить усреднение',
     peakHold: 'Peak hold',
     noiseFloor: 'Порог шума',
+    noiseFloorHint:
+      'После замера полосы, которые не поднимаются над шумом хотя бы на 10 дБ, показываются тускло: это не звук в зале, а его собственный фон. В тихом помещении так выглядит почти весь низ — и это нормально.',
     measureNoise: 'Замерить тишину',
     measuringNoise: (left: number) => `Замер тишины… ${left.toFixed(0)} с`,
     noiseMeasured: 'Порог шума замерен',

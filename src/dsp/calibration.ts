@@ -84,6 +84,18 @@ export const MAX_CORRECTION_DB = 15;
 /**
  * Linear power gains that undo the microphone response.
  * Multiply a power spectrum by these before summing into bands.
+ *
+ * Correction is applied only where the microphone is trusted; outside that
+ * range it holds at the edge value.
+ *
+ * This matters more than it sounds. The generic phone profile is 30 dB down
+ * at 20 Hz, so correcting it literally adds 15 dB (the cap) of gain to the
+ * bottom three bands - and then the app turns around and tells the user not
+ * to trust those bands. The result is a wall of bass that is not in the room:
+ * the profile is a class average, its error down there is as large as the
+ * correction itself, and a confident number built from a guess is worse than
+ * no number. A real calibration file covers its whole measured range, so this
+ * clamp does nothing to it.
  */
 export function correctionGains(
   profile: MicProfile | null,
@@ -95,7 +107,11 @@ export function correctionGains(
     out.fill(1);
     return out;
   }
-  const response = interpolateResponse(profile.points, frequencies);
+  const clamped = new Float64Array(frequencies.length);
+  for (let i = 0; i < clamped.length; i++) {
+    clamped[i] = Math.min(Math.max(frequencies[i], profile.trustedFromHz), profile.trustedToHz);
+  }
+  const response = interpolateResponse(profile.points, clamped);
   for (let i = 0; i < out.length; i++) {
     out[i] = Math.pow(10, Math.min(-response[i], maxBoostDb) / 10);
   }
