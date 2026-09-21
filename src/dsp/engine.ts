@@ -127,6 +127,9 @@ export interface EngineSnapshot {
   transferFrames: number;
   /** True when the source really delivers two channels. */
   dualChannelActive: boolean;
+  /** Input has not settled yet; nothing is being accumulated. */
+  warmingUp: boolean;
+  warmupRemaining: number;
   elapsedSeconds: number;
   frames: number;
 }
@@ -134,6 +137,24 @@ export interface EngineSnapshot {
 type Listener = (snapshot: EngineSnapshot) => void;
 
 const NOISE_MEASURE_SECONDS = 3;
+
+/**
+ * Below this a frame is not a quiet room, it is a microphone that has not
+ * started yet: an audio session opening up delivers digital silence, while
+ * even a silent hall sits around -70 dBFS.
+ */
+const SILENCE_DB = -100;
+
+/**
+ * How long to wait after the first live frame before anything is measured.
+ *
+ * Opening a microphone is not instant: the OS ramps the input up over a
+ * fraction of a second, and those frames are quieter than the room. Averaged
+ * in, they drag the whole measurement down and then let it climb back for as
+ * long as the averaging window - which reads as "quiet at first, then loud"
+ * in a room where nothing changed.
+ */
+export const WARMUP_SECONDS = 1.0;
 
 /**
  * Owns the measurement pipeline: pulls frames at a fixed hop, corrects for the
@@ -169,6 +190,8 @@ export class AnalyzerEngine {
   private cSlow = new ExponentialAverager(1, TIME_CONSTANTS.slow);
 
   private nextFrame = 0;
+  private live = false;
+  private warmupRemaining = WARMUP_SECONDS;
   private raf = 0;
   private listeners = new Set<Listener>();
   private frozenFlag = false;
@@ -228,6 +251,8 @@ export class AnalyzerEngine {
       transferDelayMs: 0,
       transferFrames: 0,
       dualChannelActive: false,
+      warmingUp: false,
+      warmupRemaining: 0,
       elapsedSeconds: 0,
       frames: 0,
     };
@@ -431,6 +456,8 @@ export class AnalyzerEngine {
     this.noiseFloor = null;
     this.detector.reset();
     this.nextFrame = 0;
+    this.live = false;
+    this.warmupRemaining = WARMUP_SECONDS;
 
     const weightingPerBand = new Float64Array(bands.length);
     for (let b = 0; b < bands.length; b++) {
@@ -532,7 +559,7 @@ export class AnalyzerEngine {
       }
     }
 
-    this.updateTransfer(buffer, size, hop);
+    if (!this.warmingUp) this.updateTransfer(buffer, size, hop);
 
     let processed = 0;
     const dt = this.frameSeconds;
@@ -540,16 +567,6 @@ export class AnalyzerEngine {
       if (!buffer.read(this.nextFrame, this.frame)) break;
       const power = analyser.analyse(this.frame);
       for (let k = 0; k < power.length; k++) this.corrected[k] = power[k] * this.micGains[k];
-
-      bandEnergy(this.corrected, mapping, this.instantBands);
-      refiner?.applyTo(this.instantBands);
-      // Resonances are looked for in the instantaneous spectrum: averaging
-      // would smear exactly the narrow, steady peaks we are hunting.
-      this.detector.push(this.corrected, analyser.binWidth, analyser.enbwBins, performance.now());
-      this.binAverager?.push(this.corrected, dt);
-      this.bandAverager?.push(this.instantBands, dt);
-      this.longAverager?.push(this.instantBands, dt);
-      if (this.settings.peakHoldEnabled) this.peakHold?.push(this.instantBands, dt);
 
       let zTotal = 0;
       let aTotal = 0;
@@ -560,6 +577,48 @@ export class AnalyzerEngine {
         aTotal += p * this.aGains[k];
         cTotal += p * this.cGains[k];
       }
+
+      if (!this.live) {
+        // Still digital silence: the microphone has not actually opened.
+        if (powerToDb(zTotal) < SILENCE_DB) {
+          this.nextFrame += hop;
+          processed++;
+          continue;
+        }
+        this.live = true;
+      }
+
+      bandEnergy(this.corrected, mapping, this.instantBands);
+      refiner?.applyTo(this.instantBands);
+      // Resonances are looked for in the instantaneous spectrum: averaging
+      // would smear exactly the narrow, steady peaks we are hunting.
+      this.detector.push(this.corrected, analyser.binWidth, analyser.enbwBins, performance.now());
+      // The short averagers run during warm-up so there is a picture on
+      // screen immediately; nothing a decision rests on does.
+      this.binAverager?.push(this.corrected, dt);
+      this.bandAverager?.push(this.instantBands, dt);
+
+      if (this.warmupRemaining > 0) {
+        this.warmupRemaining -= dt;
+        if (this.warmupRemaining <= 0) {
+          // Every measurement starts from a settled input, not from the ramp.
+          this.binAverager?.reset();
+          this.bandAverager?.reset();
+          this.zSlow.reset();
+          this.aSlow.reset();
+          this.cSlow.reset();
+          this.aLeqAverager.reset();
+          this.cLeqAverager.reset();
+          this.detector.reset();
+        }
+        this.nextFrame += hop;
+        processed++;
+        continue;
+      }
+
+      this.longAverager?.push(this.instantBands, dt);
+      if (this.settings.peakHoldEnabled) this.peakHold?.push(this.instantBands, dt);
+
       this.zSlow.push([zTotal], dt);
       this.aSlow.push([aTotal], dt);
       this.cSlow.push([cTotal], dt);
@@ -625,8 +684,14 @@ export class AnalyzerEngine {
     }
   }
 
+  get warmingUp(): boolean {
+    return !this.live || this.warmupRemaining > 0;
+  }
+
   private updateSnapshot(): void {
     const s = this.snapshot;
+    s.warmingUp = this.warmingUp;
+    s.warmupRemaining = Math.max(0, this.warmupRemaining);
     const bandPower = this.bandAverager?.value;
     const longPower = this.longAverager?.value;
     const peak = this.peakHold?.value;

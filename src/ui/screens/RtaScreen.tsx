@@ -66,9 +66,13 @@ export function RtaScreen() {
   const trustedFrom = settings.micProfile?.trustedFromHz ?? 20;
   const onCursor = useCallback((c: CursorReadout | null) => setCursor(c), []);
 
-  const levelText = s.levels.spl !== null
-    ? `${s.levels.spl.toFixed(1)} ${t.rta.spl}`
-    : `${s.levels.zDb.toFixed(1)} ${t.rta.relative}`;
+  // During warm-up there is no measurement yet, so show that rather than a
+  // number that is about to move on its own.
+  const levelText = s.warmingUp
+    ? t.rta.warmup
+    : s.levels.spl !== null
+      ? `${s.levels.spl.toFixed(1)} ${t.rta.spl}`
+      : `${s.levels.zDb.toFixed(1)} ${t.rta.relative}`;
 
   return (
     <div className="screen">
@@ -96,6 +100,7 @@ export function RtaScreen() {
       </div>
 
       {!running && <div className="note">{t.rta.startHint}</div>}
+      {running && s.warmingUp && <div className="note note--warn">{t.rta.warmupHint}</div>}
 
       <div className="canvas-wrap">
         <SpectrumPlot
@@ -163,6 +168,8 @@ export function RtaScreen() {
       <div className="suggestions">
         {!running ? (
           <div className="note">{t.suggest.notRunning}</div>
+        ) : s.warmingUp ? (
+          <div className="note">{t.rta.warmup}</div>
         ) : !ready ? (
           <div className="note">
             {t.suggest.warmingUp(windowFill * settings.longWindowSeconds, settings.longWindowSeconds)}

@@ -5,6 +5,7 @@ import { encodeWav } from '../../audio/wav';
 import { SpectrumAnalyzer, powerToDb } from '../../dsp/spectrum';
 import { bandEnergy, makeBands, mapBinsToBands } from '../../dsp/octave';
 import { analyseHighEnd, type HfResult } from '../../dsp/hf-check';
+import { analyseLevelStability, type StabilityResult } from '../../dsp/stability';
 import { useT } from '../../i18n';
 import { Canvas } from '../components/Canvas';
 import { clearPlot, drawGrid, freqToX, dbToY } from '../plot';
@@ -13,6 +14,8 @@ import { PerfMeter } from '../components/PerfMeter';
 
 const FFT_SIZE = 8192;
 const HF_CHECK_SECONDS = 5;
+const STABILITY_SECONDS = 10;
+const STABILITY_INTERVAL_MS = 200;
 const RECORD_SECONDS = 10;
 
 type Flag = boolean | null;
@@ -51,6 +54,8 @@ export function DiagnosticsScreen() {
   const [hf, setHf] = useState<HfResult | null>(null);
   const [hfLeft, setHfLeft] = useState(0);
   const [recordLeft, setRecordLeft] = useState(0);
+  const [stability, setStability] = useState<StabilityResult | null>(null);
+  const [stabilityLeft, setStabilityLeft] = useState(0);
   const [wavUrl, setWavUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -60,6 +65,7 @@ export function DiagnosticsScreen() {
   const frameRef = useRef(new Float32Array(FFT_SIZE));
   const nextFrameRef = useRef(0);
   const hfAccRef = useRef<{ acc: Float64Array; frames: number; until: number } | null>(null);
+  const stabilityRef = useRef<{ samples: number[]; nextAt: number; until: number } | null>(null);
   const noiseRef = useRef<Float64Array | null>(null);
 
   const supported = WebAudioSource.isSupported();
@@ -164,6 +170,19 @@ export function DiagnosticsScreen() {
           setHfLeft(left);
           if (now >= hfAccRef.current.until) finishHfCheck();
         }
+        const run = stabilityRef.current;
+        if (run) {
+          if (now >= run.nextAt) {
+            run.samples.push(powerToDb(sum));
+            run.nextAt += STABILITY_INTERVAL_MS;
+          }
+          setStabilityLeft(Math.max(0, Math.ceil((run.until - now) / 1000)));
+          if (now >= run.until) {
+            stabilityRef.current = null;
+            setStabilityLeft(0);
+            setStability(analyseLevelStability(run.samples, STABILITY_INTERVAL_MS));
+          }
+        }
       }
     };
 
@@ -199,6 +218,17 @@ export function DiagnosticsScreen() {
       until: performance.now() + HF_CHECK_SECONDS * 1000,
     };
     setHfLeft(HF_CHECK_SECONDS);
+  };
+
+  const startStabilityCheck = () => {
+    setStability(null);
+    const now = performance.now();
+    stabilityRef.current = {
+      samples: [],
+      nextAt: now,
+      until: now + STABILITY_SECONDS * 1000,
+    };
+    setStabilityLeft(STABILITY_SECONDS);
   };
 
   const startRecording = () => {
@@ -276,6 +306,11 @@ export function DiagnosticsScreen() {
         `settings: ${JSON.stringify(info.settings)}`,
       );
     }
+    if (stability) {
+      lines.push(
+        `Level stability: ${stability.verdict}, drift ${stability.driftDb.toFixed(1)} dB, spread ${stability.spreadDb.toFixed(1)} dB`,
+      );
+    }
     if (hf) {
       lines.push(
         `HF edge: ${Math.round(hf.edgeHz)} Hz`,
@@ -283,7 +318,7 @@ export function DiagnosticsScreen() {
       );
     }
     return lines.join('\n');
-  }, [hf, info, secure, supported, t]);
+  }, [hf, info, secure, stability, supported, t]);
 
   const processingState: 'ok' | 'bad' | 'unknown' = !info
     ? 'unknown'
@@ -419,6 +454,39 @@ export function DiagnosticsScreen() {
                 ) : (
                   <div className="note note--ok">{t.diagnostics.hfClean}</div>
                 )}
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card__title">{t.diagnostics.stability}</div>
+            <p className="small muted">{t.diagnostics.stabilityHint}</p>
+            <div className="row">
+              <button onClick={startStabilityCheck} disabled={stabilityLeft > 0}>
+                {stabilityLeft > 0
+                  ? t.diagnostics.stabilityRunning(stabilityLeft)
+                  : t.diagnostics.stabilityRun}
+              </button>
+            </div>
+            {stability && (
+              <div style={{ marginTop: 10 }}>
+                {stability.verdict === 'stable' && (
+                  <div className="note note--ok">{t.diagnostics.stabilityStable(stability.driftDb)}</div>
+                )}
+                {stability.verdict === 'drifting' && (
+                  <div className="note note--bad">
+                    {t.diagnostics.stabilityDrifting(stability.driftDb)}
+                  </div>
+                )}
+                {stability.verdict === 'unstable-source' && (
+                  <div className="note note--warn">{t.diagnostics.stabilityUnstable}</div>
+                )}
+                {stability.verdict === 'too-quiet' && (
+                  <div className="note note--warn">{t.diagnostics.stabilityTooQuiet}</div>
+                )}
+                <div className="faint small mono" style={{ marginTop: 6 }}>
+                  {stability.segmentsDb.map((v) => v.toFixed(1)).join(' → ')}
+                </div>
               </div>
             )}
           </div>

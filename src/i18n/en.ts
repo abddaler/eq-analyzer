@@ -294,6 +294,9 @@ export const en: Dict = {
     pinkComp: 'Pink compensation',
     pinkCompHint:
       'Pink noise falls 3 dB per octave on a raw FFT. The compensation (+3 dB/oct) makes it flat, as on the RTA.',
+    warmup: 'settling…',
+    warmupHint:
+      'Waiting for the input to settle. For a fraction of a second after the microphone opens it is quieter than the room, and averaging that in makes the level climb afterwards.',
     level: 'Level',
     relative: 'rel. dB',
     spl: 'dB SPL',
@@ -362,6 +365,9 @@ export const en: Dict = {
     processingUnknown:
       'The browser does not report the processing state. Judge it by the high-frequency cutoff and by level stability.',
     rawSettings: 'Full track.getSettings() response',
+    warmup: 'settling…',
+    warmupHint:
+      'Waiting for the input to settle. For a fraction of a second after the microphone opens it is quieter than the room, and averaging that in makes the level climb afterwards.',
     level: 'Level',
     peak: 'Peak',
     clipping: 'CLIPPING',
@@ -376,6 +382,18 @@ export const en: Dict = {
     hfCliff: (hz: number, drop: number) =>
       `Sharp cutoff detected near ${Math.round(hz)} Hz (${drop.toFixed(0)} dB drop). This looks like system microphone processing.`,
     hfClean: 'No sharp cutoff detected — the top end gets through.',
+    stability: 'Level stability (AGC check)',
+    stabilityHint:
+      'Play a steady signal — pink noise — and leave the phone alone for 10 seconds. If the level moves noticeably, automatic gain control is running: the spectrum will look plausible while every level lies.',
+    stabilityRun: 'Check (10 s)',
+    stabilityRunning: (left: number) => `Measuring… ${left} s`,
+    stabilityStable: (drift: number) =>
+      `Level is steady: ${drift >= 0 ? '+' : ''}${drift.toFixed(1)} dB over 10 s. No sign of automatic gain.`,
+    stabilityDrifting: (drift: number) =>
+      `The level moved ${drift >= 0 ? '+' : ''}${drift.toFixed(1)} dB on a steady signal. This looks like automatic gain control — levels cannot be trusted, and the spectrum shape only partly.`,
+    stabilityUnstable:
+      'The sound in the room is not steady itself, so nothing can be concluded. Play pink noise and try again.',
+    stabilityTooQuiet: 'Too quiet to judge. Turn the source up.',
     record: 'WAV recording',
     recordHint: 'Record 10 seconds and inspect the file in an editor to confirm the signal quality.',
     recordStart: 'Record 10 s',
